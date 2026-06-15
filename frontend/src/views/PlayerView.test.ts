@@ -55,12 +55,20 @@ const engineMocks = vi.hoisted(() => {
   return { behavior, instances, pendingLoads, ToneAudioEngine };
 });
 
+const userSettingsMocks = vi.hoisted(() => ({
+  get: vi.fn(),
+}));
+
 vi.mock("@/api/manifest", () => ({
   getSongManifest: vi.fn(),
 }));
 
 vi.mock("@/audio/ToneAudioEngine", () => ({
   ToneAudioEngine: engineMocks.ToneAudioEngine,
+}));
+
+vi.mock("@/storage/userPlayerSettings", () => ({
+  getUserPlayerSettings: userSettingsMocks.get,
 }));
 
 const manifest: SongManifest = {
@@ -106,6 +114,7 @@ describe("PlayerView", () => {
     engineMocks.behavior.startPromise = null;
     engineMocks.instances.length = 0;
     engineMocks.pendingLoads.length = 0;
+    userSettingsMocks.get.mockResolvedValue(null);
   });
 
   it("loads stems automatically and keeps controls disabled until loading completes", async () => {
@@ -121,16 +130,15 @@ describe("PlayerView", () => {
     expect(engineMocks.ToneAudioEngine).toHaveBeenCalledTimes(1);
     expect(wrapper.find("#player-key").attributes("disabled")).toBeUndefined();
     expect(buttonByText(wrapper, "Play").attributes("disabled")).toBeDefined();
-    expect(buttonByText(wrapper, "Pause").attributes("disabled")).toBeDefined();
     expect(buttonByText(wrapper, "Stop").attributes("disabled")).toBeDefined();
     expect(wrapper.find(".seek-control input").attributes("disabled")).toBeDefined();
-    expect(wrapper.find(".mixer-row input[type='checkbox']").attributes("disabled")).toBeDefined();
-    expect(wrapper.find(".focus-controls select").attributes("disabled")).toBeDefined();
+    expect(wrapper.find(".mute-button").attributes("disabled")).toBeDefined();
+    expect(wrapper.find("#focus-stem").attributes("disabled")).toBeDefined();
 
     expect(engineMocks.ToneAudioEngine.mock.results[0].value.initializeFromUserGesture).not.toHaveBeenCalled();
   });
 
-  it("shows decoding and ready states while only player controls stay disabled", async () => {
+  it("shows decoding and hides load progress when controls become ready", async () => {
     vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
     engineMocks.behavior.initialProgressRatio = 1;
 
@@ -139,18 +147,17 @@ describe("PlayerView", () => {
 
     expect(wrapper.find("#player-key").attributes("disabled")).toBeUndefined();
     expect(buttonByText(wrapper, "Play").attributes("disabled")).toBeDefined();
-    expect(buttonByText(wrapper, "Pause").attributes("disabled")).toBeDefined();
     expect(buttonByText(wrapper, "Stop").attributes("disabled")).toBeDefined();
     expect(wrapper.find(".seek-control input").attributes("disabled")).toBeDefined();
-    expect(wrapper.find(".mixer-row input[type='checkbox']").attributes("disabled")).toBeDefined();
-    expect(wrapper.find(".focus-controls select").attributes("disabled")).toBeDefined();
+    expect(wrapper.find(".mute-button").attributes("disabled")).toBeDefined();
+    expect(wrapper.find("#focus-stem").attributes("disabled")).toBeDefined();
 
     engineMocks.pendingLoads[0]?.();
-    await vi.waitFor(() => expect(wrapper.text()).toContain("Stems bereit"));
+    await vi.waitFor(() => expect(wrapper.find(".loading-progress").exists()).toBe(false));
 
     expect(buttonByText(wrapper, "Play").attributes("disabled")).toBeUndefined();
-    expect(wrapper.find(".mixer-row input[type='checkbox']").attributes("disabled")).toBeUndefined();
-    expect(wrapper.find(".focus-controls select").attributes("disabled")).toBeUndefined();
+    expect(wrapper.find(".mute-button").attributes("disabled")).toBeUndefined();
+    expect(wrapper.find("#focus-stem").attributes("disabled")).toBeUndefined();
 
     const pendingStart = deferred<void>();
     engineMocks.behavior.startPromise = pendingStart.promise;
@@ -180,8 +187,28 @@ describe("PlayerView", () => {
     expect(buttonByText(wrapper, "Play").attributes("disabled")).toBeDefined();
 
     engineMocks.pendingLoads[1]?.();
-    await vi.waitFor(() => expect(wrapper.text()).toContain("Stems bereit"));
+    await vi.waitFor(() => expect(wrapper.find(".loading-progress").exists()).toBe(false));
     expect(buttonByText(wrapper, "Play").attributes("disabled")).toBeUndefined();
+  });
+
+  it("combines play and pause and exposes focus selection in the player overview", async () => {
+    engineMocks.behavior.holdLoad = false;
+    vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
+
+    const { wrapper } = await mountPlayerView();
+    await flushPromises();
+
+    expect(wrapper.find("#focus-stem").exists()).toBe(true);
+    await wrapper.find("#focus-stem").setValue("1");
+    expect(engineMocks.instances[0].setFocus).toHaveBeenLastCalledWith(expect.objectContaining({ stemId: 1 }));
+
+    await buttonByText(wrapper, "Play").trigger("click");
+    await flushPromises();
+    expect(buttonByText(wrapper, "Pause").exists()).toBe(true);
+
+    await buttonByText(wrapper, "Pause").trigger("click");
+    expect(engineMocks.instances[0].pause).toHaveBeenCalledTimes(1);
+    expect(buttonByText(wrapper, "Play").exists()).toBe(true);
   });
 
   it("offers a retry after a stem load error", async () => {

@@ -18,5 +18,6 @@ describe("App", () => {
 
     expect(wrapper.text()).toContain("TeamTracks");
     expect(wrapper.text()).toContain("Songs");
+    expect(wrapper.text()).toContain("Einstellungen");
   });
 });

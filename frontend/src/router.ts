@@ -15,6 +15,11 @@ export const router = createRouter({
       component: () => import("./views/SongListView.vue"),
     },
     {
+      path: "/settings",
+      name: "user-settings",
+      component: () => import("./views/UserSettingsView.vue"),
+    },
+    {
       path: "/admin/login",
       name: "admin-login",
       component: () => import("./views/AdminLoginView.vue"),

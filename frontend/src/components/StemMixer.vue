@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { PlayableStemManifestItem } from "@/types/manifest";
-import { formatSongKey } from "@/types/keys";
 
 defineProps<{
   stems: PlayableStemManifestItem[];
@@ -21,23 +20,23 @@ defineEmits<{
 <template>
   <div class="mixer-list">
     <div v-for="stem in stems" :key="stem.id" class="mixer-row">
-      <div>
+      <div class="stem-summary">
         <strong>{{ stem.name }}</strong>
-        <span class="table-subtext">{{ stem.role }} · {{ formatSongKey(stem.key) }} · {{ stem.channels ?? "n/a" }} ch</span>
+        <span class="table-subtext">{{ stem.role }}</span>
       </div>
-      <label class="inline-control">
-        <input
-          :id="`stem-${stem.id}-muted`"
-          :name="`stem-${stem.id}-muted`"
-          type="checkbox"
-          :checked="muted[stem.id] ?? false"
-          :disabled="disabled"
-          @change="$emit('setMuted', stem.id, ($event.target as HTMLInputElement).checked)"
-        />
+      <button
+        :id="`stem-${stem.id}-muted`"
+        class="mute-button"
+        :class="{ 'is-muted': muted[stem.id] ?? false }"
+        type="button"
+        :aria-pressed="muted[stem.id] ?? false"
+        :disabled="disabled"
+        @click="$emit('setMuted', stem.id, !(muted[stem.id] ?? false))"
+      >
         Mute
-      </label>
+      </button>
       <label class="gain-control">
-        <span>{{ gains[stem.id] ?? 0 }} dB</span>
+        <span>Gain <strong>{{ gains[stem.id] ?? 0 }} dB</strong></span>
         <input
           :id="`stem-${stem.id}-gain`"
           :name="`stem-${stem.id}-gain`"

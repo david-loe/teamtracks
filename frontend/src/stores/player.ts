@@ -4,11 +4,12 @@ import { computed, ref, shallowRef } from "vue";
 import * as manifestApi from "@/api/manifest";
 import type { AudioEngine, StemLoadProgress } from "@/audio/AudioEngine";
 import { ToneAudioEngine } from "@/audio/ToneAudioEngine";
+import { getUserPlayerSettings } from "@/storage/userPlayerSettings";
 import type { PlayerSettings, SongManifest } from "@/types/manifest";
 import { isPlayableStem } from "@/types/manifest";
 
 type PlaybackState = "stopped" | "paused" | "playing";
-export type AudioLoadPhase = "downloading" | "decoding" | "ready";
+export type AudioLoadPhase = "downloading" | "decoding";
 
 const CURRENT_TIME_INTERVAL_MS = 200;
 const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
@@ -69,7 +70,7 @@ export const usePlayerStore = defineStore("player", () => {
   });
   const audioLoadPhase = computed<AudioLoadPhase | null>(() => {
     if (audioLoaded.value) {
-      return "ready";
+      return null;
     }
     if (!loadingAudio.value) {
       return null;
@@ -91,8 +92,20 @@ export const usePlayerStore = defineStore("player", () => {
         return;
       }
       manifest.value = nextManifest;
-      focusedGainDb.value = playerSettings.value.focusGainDefaultDb;
-      backgroundGainDb.value = playerSettings.value.backgroundGainDefaultDb;
+      const userSettings = await loadUserSettings();
+      if (requestId !== pageLoadId) {
+        return;
+      }
+      focusedGainDb.value = clampGain(
+        userSettings?.focusedGainDb ?? playerSettings.value.focusGainDefaultDb,
+        playerSettings.value.focusGainMinDb,
+        playerSettings.value.focusGainMaxDb,
+      );
+      backgroundGainDb.value = clampGain(
+        userSettings?.backgroundGainDb ?? playerSettings.value.backgroundGainDefaultDb,
+        playerSettings.value.backgroundGainMinDb,
+        playerSettings.value.backgroundGainMaxDb,
+      );
       initializeStemControls();
     } catch (err) {
       if (requestId === pageLoadId) {
@@ -324,6 +337,14 @@ export const usePlayerStore = defineStore("player", () => {
     return Math.min(Math.max(0, safePosition), durationSeconds.value);
   }
 
+  async function loadUserSettings() {
+    try {
+      return await getUserPlayerSettings();
+    } catch {
+      return null;
+    }
+  }
+
   return {
     manifest,
     loadingManifest,
@@ -369,4 +390,8 @@ export const usePlayerStore = defineStore("player", () => {
 
 function getErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "Unbekannter Fehler";
+}
+
+function clampGain(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), maximum);
 }

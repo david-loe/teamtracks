@@ -397,7 +397,8 @@ textarea:focus {
 
 .player-panel {
   display: grid;
-  gap: 20px;
+  gap: 14px;
+  padding: 16px;
 }
 
 .empty-state {
@@ -425,8 +426,7 @@ textarea:focus {
 .progress-header,
 .progress-row,
 .transport,
-.seek-control,
-.mixer-row {
+.seek-control {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -449,10 +449,9 @@ textarea:focus {
 }
 
 .progress-list,
-.mixer-list,
-.focus-controls {
+.mixer-list {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .progress-row {
@@ -461,14 +460,27 @@ textarea:focus {
 }
 
 .transport {
-  align-items: stretch;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
 }
 
 .transport-buttons {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
+}
+
+.transport-buttons .button {
+  min-height: 44px;
+}
+
+.transport-buttons .button-primary {
+  min-width: 104px;
+}
+
+.stop-button {
+  min-width: 64px;
 }
 
 .seek-control {
@@ -481,46 +493,110 @@ textarea:focus {
   flex: 1;
 }
 
-.mixer-row {
-  align-items: flex-start;
-  border-top: 1px solid #e5e9f0;
-  padding-top: 12px;
+.player-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.inline-control {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+.player-options label,
+.settings-range {
+  display: grid;
+  gap: 6px;
   color: #374151;
+  font-size: 0.9rem;
   font-weight: 650;
 }
 
-.inline-control input {
-  width: auto;
+.mixer-panel {
+  padding: 16px;
+}
+
+.mixer-panel h2 {
+  margin-bottom: 8px;
+}
+
+.mixer-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) auto minmax(200px, 1.3fr);
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid #e5e9f0;
+  padding-top: 8px;
+}
+
+.stem-summary {
+  min-width: 0;
+}
+
+.mute-button {
+  min-width: 72px;
+  min-height: 44px;
+  border: 1px solid #c9d1df;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #374151;
+  font-weight: 700;
+}
+
+.mute-button.is-muted {
+  border-color: #b91c1c;
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.mute-button:disabled {
+  opacity: 0.55;
 }
 
 .gain-control {
   display: grid;
-  min-width: 180px;
-  gap: 6px;
+  min-width: 0;
+  grid-template-columns: auto minmax(120px, 1fr);
+  align-items: center;
+  gap: 10px;
   color: #4b5563;
   font-size: 0.9rem;
 }
 
-.focus-controls label {
+.gain-control span {
+  white-space: nowrap;
+}
+
+.user-settings-panel {
   display: grid;
-  gap: 6px;
-  color: #374151;
-  font-weight: 650;
+  width: min(680px, 100%);
+  gap: 24px;
+}
+
+.settings-range > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-save-status {
+  min-height: 22px;
+  margin: 0;
+}
+
+.settings-save-status .error-text {
+  margin: 0;
 }
 
 @media (max-width: 720px) {
   .topbar {
-    padding: 0 16px;
+    padding: 0 12px;
+  }
+
+  .nav {
+    gap: 10px;
+    font-size: 0.86rem;
   }
 
   .page-header {
     display: block;
+    margin-bottom: 16px;
   }
 
   .layout-grid {
@@ -537,15 +613,47 @@ textarea:focus {
   }
 
   .progress-header,
-  .progress-row,
-  .mixer-row,
-  .seek-control {
+  .progress-row {
     align-items: stretch;
     flex-direction: column;
   }
 
+  .main-content {
+    width: min(100% - 20px, 1120px);
+    padding: 20px 0;
+  }
+
+  h1 {
+    font-size: clamp(1.65rem, 8vw, 2.2rem);
+  }
+
+  .player-options {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .transport {
+    grid-template-columns: 1fr;
+  }
+
+  .transport-buttons .button-primary {
+    flex: 1;
+  }
+
+  .seek-control {
+    gap: 8px;
+  }
+
+  .mixer-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
   .gain-control {
-    width: 100%;
+    grid-column: 1 / -1;
+  }
+
+  .panel,
+  .user-settings-panel {
+    padding: 14px;
   }
 
   .actions-cell {
@@ -558,5 +666,25 @@ textarea:focus {
 
   .actions-cell .button + .button {
     margin-left: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .brand {
+    font-size: 0.9rem;
+  }
+
+  .nav {
+    gap: 7px;
+    font-size: 0.78rem;
+  }
+
+  .player-options {
+    grid-template-columns: 1fr;
+  }
+
+  .seek-control {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
   }
 }

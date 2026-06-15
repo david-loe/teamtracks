@@ -48,12 +48,20 @@ const engineMocks = vi.hoisted(() => {
   return { behavior, instances, ToneAudioEngine };
 });
 
+const userSettingsMocks = vi.hoisted(() => ({
+  get: vi.fn(),
+}));
+
 vi.mock("@/api/manifest", () => ({
   getSongManifest: vi.fn(),
 }));
 
 vi.mock("@/audio/ToneAudioEngine", () => ({
   ToneAudioEngine: engineMocks.ToneAudioEngine,
+}));
+
+vi.mock("@/storage/userPlayerSettings", () => ({
+  getUserPlayerSettings: userSettingsMocks.get,
 }));
 
 const manifest: SongManifest = {
@@ -118,6 +126,7 @@ describe("usePlayerStore", () => {
     engineMocks.behavior.startPromise = null;
     engineMocks.behavior.startError = null;
     engineMocks.behavior.progressCallback = null;
+    userSettingsMocks.get.mockResolvedValue(null);
   });
 
   it("loads playable stems automatically without starting the audio context", async () => {
@@ -208,6 +217,38 @@ describe("usePlayerStore", () => {
     store.reset();
   });
 
+  it("applies locally stored focus gains within the manifest limits", async () => {
+    const configuredManifest: SongManifest = {
+      ...manifest,
+      playerSettings: {
+        stemGainDefaultDb: 0,
+        stemGainMinDb: -24,
+        stemGainMaxDb: 6,
+        stemGainStepDb: 1,
+        focusGainDefaultDb: 0,
+        focusGainMinDb: -10,
+        focusGainMaxDb: 5,
+        backgroundGainDefaultDb: -12,
+        backgroundGainMinDb: -30,
+        backgroundGainMaxDb: -1,
+      },
+    };
+    vi.mocked(manifestApi.getSongManifest).mockResolvedValue(configuredManifest);
+    userSettingsMocks.get.mockResolvedValue({ focusedGainDb: 12, backgroundGainDb: -60 });
+
+    const store = usePlayerStore();
+    await store.load(10);
+
+    expect(store.focusedGainDb).toBe(5);
+    expect(store.backgroundGainDb).toBe(-30);
+    expect(engineMocks.instances[0].setFocus).toHaveBeenLastCalledWith({
+      stemId: null,
+      focusedGainDb: 5,
+      backgroundGainDb: -30,
+    });
+    store.reset();
+  });
+
   it("keeps playback disabled while stems are loading", async () => {
     vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
     const pendingLoad = deferred<void>();
@@ -226,7 +267,7 @@ describe("usePlayerStore", () => {
     store.reset();
   });
 
-  it("exposes download, decoding, and ready phases while controls stay gated", async () => {
+  it("exposes download and decoding phases and hides progress when ready", async () => {
     vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
     const pendingLoad = deferred<void>();
     engineMocks.behavior.loadPromise = pendingLoad.promise;
@@ -248,7 +289,7 @@ describe("usePlayerStore", () => {
     pendingLoad.resolve();
     await loadPromise;
 
-    expect(store.audioLoadPhase).toBe("ready");
+    expect(store.audioLoadPhase).toBeNull();
     expect(store.controlsEnabled).toBe(true);
     store.reset();
   });

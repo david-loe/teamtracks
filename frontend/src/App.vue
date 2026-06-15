@@ -14,7 +14,7 @@ async function signOut(): Promise<void> { await logout(); await router.push("/so
     <header class="topbar">
       <RouterLink class="brand" :to="adminArea ? '/admin/songs' : '/songs'">TeamTracks</RouterLink>
       <nav v-if="adminArea && route.meta.admin" class="nav"><RouterLink to="/admin/songs">Songs</RouterLink><RouterLink to="/admin/settings">Einstellungen</RouterLink><button class="nav-button" @click="signOut">Logout</button></nav>
-      <nav v-else class="nav"><RouterLink to="/songs">Songs</RouterLink><RouterLink to="/admin/login">Admin</RouterLink></nav>
+      <nav v-else class="nav"><RouterLink to="/songs">Songs</RouterLink><RouterLink to="/settings">Einstellungen</RouterLink><RouterLink to="/admin/login">Admin</RouterLink></nav>
     </header>
 
     <main class="main-content">

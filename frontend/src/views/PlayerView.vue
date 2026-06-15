@@ -3,7 +3,6 @@ import { computed, onUnmounted, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import type { LocationQueryValue } from "vue-router";
 
-import FocusControls from "@/components/FocusControls.vue";
 import LoadingProgress from "@/components/LoadingProgress.vue";
 import StemMixer from "@/components/StemMixer.vue";
 import { usePlayerStore } from "@/stores/player";
@@ -67,6 +66,19 @@ function selectKey(event: Event): void {
   void router.push({
     query: queryWithKey(key === originalKey ? null : key),
   });
+}
+
+function selectFocus(event: Event): void {
+  const value = (event.target as HTMLSelectElement).value;
+  playerStore.setFocusStem(value ? Number(value) : null);
+}
+
+function togglePlayback(): void {
+  if (playerStore.playbackState === "playing") {
+    playerStore.pause();
+    return;
+  }
+  void playerStore.play();
 }
 
 function keyForVariant(semitoneOffset: number): number {
@@ -146,24 +158,40 @@ async function replaceKeyQuery(key: number | null): Promise<void> {
         </div>
 
         <template v-else>
-          <label v-if="playerStore.keyVariants.length > 0" class="key-select">
-            Tonart
-            <select
-              id="player-key"
-              name="playerKey"
-              :value="playerStore.selectedKey ?? ''"
-              @change="selectKey"
-            >
-              <option
-                v-for="keyVariant in playerStore.keyVariants"
-                :key="keyVariant.id"
-                :value="keyForVariant(keyVariant.semitoneOffset)"
-                :disabled="!keyVariant.playable"
+          <div class="player-options">
+            <label v-if="playerStore.keyVariants.length > 0">
+              Tonart
+              <select
+                id="player-key"
+                name="playerKey"
+                :value="playerStore.selectedKey ?? ''"
+                @change="selectKey"
               >
-                {{ formatSongKey(keyForVariant(keyVariant.semitoneOffset)) }}{{ keyVariant.isOriginal ? " (Original)" : "" }}
-              </option>
-            </select>
-          </label>
+                <option
+                  v-for="keyVariant in playerStore.keyVariants"
+                  :key="keyVariant.id"
+                  :value="keyForVariant(keyVariant.semitoneOffset)"
+                  :disabled="!keyVariant.playable"
+                >
+                  {{ formatSongKey(keyForVariant(keyVariant.semitoneOffset)) }}{{ keyVariant.isOriginal ? " (Original)" : "" }}
+                </option>
+              </select>
+            </label>
+
+            <label>
+              Fokus
+              <select
+                id="focus-stem"
+                name="focusStem"
+                :value="playerStore.focusedStemId ?? ''"
+                :disabled="!playerStore.controlsEnabled"
+                @change="selectFocus"
+              >
+                <option value="">Aus</option>
+                <option v-for="stem in playerStore.focusableStems" :key="stem.id" :value="stem.id">{{ stem.name }}</option>
+              </select>
+            </label>
+          </div>
 
           <div v-if="playerStore.unavailableStems.length > 0" class="partial-stems-notice">
             <p class="muted">In dieser Tonart nicht verfügbare Stems:</p>
@@ -191,21 +219,13 @@ async function replaceKeyQuery(key: number | null): Promise<void> {
               <button
                 class="button button-primary"
                 type="button"
-                :disabled="!playerStore.controlsEnabled || playerStore.startingPlayback || playerStore.playbackState === 'playing'"
-                @click="playerStore.play"
+                :disabled="!playerStore.controlsEnabled || playerStore.startingPlayback"
+                @click="togglePlayback"
               >
-                {{ playerStore.startingPlayback ? "Audio wird gestartet..." : "Play" }}
+                {{ playerStore.startingPlayback ? "Audio wird gestartet..." : playerStore.playbackState === "playing" ? "Pause" : "Play" }}
               </button>
               <button
-                class="button button-secondary"
-                type="button"
-                :disabled="!playerStore.controlsEnabled || playerStore.playbackState !== 'playing'"
-                @click="playerStore.pause"
-              >
-                Pause
-              </button>
-              <button
-                class="button button-secondary"
+                class="button button-secondary stop-button"
                 type="button"
                 :disabled="!playerStore.controlsEnabled"
                 @click="playerStore.stop"
@@ -234,35 +254,19 @@ async function replaceKeyQuery(key: number | null): Promise<void> {
       <p v-else class="muted">Noch kein Manifest geladen.</p>
     </section>
 
-    <div v-if="playerStore.manifest?.playable" class="layout-grid section-block">
-      <section class="panel">
-        <h2>Mixer</h2>
-        <StemMixer
-          :stems="playerStore.playableStems"
-          :muted="playerStore.mutedStems"
-          :gains="playerStore.stemGains"
-          :disabled="!playerStore.controlsEnabled"
-          :min-gain-db="playerStore.playerSettings.stemGainMinDb"
-          :max-gain-db="playerStore.playerSettings.stemGainMaxDb"
-          :step-gain-db="playerStore.playerSettings.stemGainStepDb"
-          @set-muted="playerStore.setStemMuted"
-          @set-gain="playerStore.setStemGain"
-        />
-      </section>
-
-      <section class="panel">
-        <h2>Fokus</h2>
-        <FocusControls
-          :stems="playerStore.focusableStems"
-          :selected-stem-id="playerStore.focusedStemId"
-          :focused-gain-db="playerStore.focusedGainDb"
-          :background-gain-db="playerStore.backgroundGainDb"
-          :disabled="!playerStore.controlsEnabled"
-          :settings="playerStore.playerSettings"
-          @set-focus-stem="playerStore.setFocusStem"
-          @set-focus-gains="playerStore.setFocusGains"
-        />
-      </section>
-    </div>
+    <section v-if="playerStore.manifest?.playable" class="panel mixer-panel section-block">
+      <h2>Mixer</h2>
+      <StemMixer
+        :stems="playerStore.playableStems"
+        :muted="playerStore.mutedStems"
+        :gains="playerStore.stemGains"
+        :disabled="!playerStore.controlsEnabled"
+        :min-gain-db="playerStore.playerSettings.stemGainMinDb"
+        :max-gain-db="playerStore.playerSettings.stemGainMaxDb"
+        :step-gain-db="playerStore.playerSettings.stemGainStepDb"
+        @set-muted="playerStore.setStemMuted"
+        @set-gain="playerStore.setStemGain"
+      />
+    </section>
   </section>
 </template>
