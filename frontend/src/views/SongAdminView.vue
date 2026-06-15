@@ -186,18 +186,20 @@ function variantsForStem(stemId: number): StemKeyAssetVariant[] {
               <td><span class="status-pill" :class="`status-${stem.status}`">{{ stem.status }}</span></td>
               <td>{{ formatSongKey(stem.key) }}</td>
               <td>
-                <span v-if="variantsForStem(stem.id).length === 0" class="table-subtext">keine</span>
-                <span v-else class="badge-row">
-                  <span
-                    v-for="variant in variantsForStem(stem.id)"
-                    :key="`${stem.id}-${variant.songKeyId}`"
-                    class="status-pill key-badge"
-                    :class="`status-${variant.status}`"
-                    :title="variant.errorMessage ?? undefined"
-                  >
-                    {{ formatSongKey(variant.targetKey) }}
+                <template v-if="stem.key !== null">
+                  <span v-if="variantsForStem(stem.id).length === 0" class="table-subtext">keine</span>
+                  <span v-else class="badge-row">
+                    <span
+                      v-for="variant in variantsForStem(stem.id)"
+                      :key="`${stem.id}-${variant.songKeyId}`"
+                      class="status-pill key-badge"
+                      :class="`status-${variant.status}`"
+                      :title="variant.errorMessage ?? undefined"
+                    >
+                      {{ formatSongKey(variant.targetKey) }}
+                    </span>
                   </span>
-                </span>
+                </template>
               </td>
               <td>
                 <span class="table-subtext">

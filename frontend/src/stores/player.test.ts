@@ -11,6 +11,7 @@ const engineMocks = vi.hoisted(() => {
     loadError: null as Error | null,
     startPromise: null as Promise<void> | null,
     startError: null as Error | null,
+    progressCallback: null as ((progress: { stemId: number; loadedBytes: number; totalBytes: number; ratio: number }) => void) | null,
   };
   const instances: any[] = [];
   const ToneAudioEngine = vi.fn(function ToneAudioEngine() {
@@ -22,6 +23,7 @@ const engineMocks = vi.hoisted(() => {
         }
       }),
       loadManifest: vi.fn(async (_manifest, onProgress) => {
+        behavior.progressCallback = onProgress;
         await behavior.loadPromise;
         if (behavior.loadError) {
           throw behavior.loadError;
@@ -64,7 +66,7 @@ const manifest: SongManifest = {
     durationMs: 120000,
     sampleRate: 48000,
   },
-  keyVariants: [{ id: 100, semitoneOffset: 0, isOriginal: true, status: "ready", errorMessage: null }],
+  keyVariants: [{ id: 100, semitoneOffset: 0, isOriginal: true, status: "ready", playable: true, errorMessage: null }],
   selectedKeyId: 100,
   playable: true,
   stems: [
@@ -115,6 +117,7 @@ describe("usePlayerStore", () => {
     engineMocks.behavior.loadError = null;
     engineMocks.behavior.startPromise = null;
     engineMocks.behavior.startError = null;
+    engineMocks.behavior.progressCallback = null;
   });
 
   it("loads playable stems automatically without starting the audio context", async () => {
@@ -133,6 +136,47 @@ describe("usePlayerStore", () => {
     expect(engine.setStemGain).toHaveBeenCalledWith(2, 0);
     expect(store.loadProgressPercent).toBe(100);
     expect(store.controlsEnabled).toBe(true);
+    store.reset();
+  });
+
+  it("loads and exposes a variant by musical key instead of variant id", async () => {
+    const transposedManifest: SongManifest = {
+      ...manifest,
+      song: { ...manifest.song, originalKey: 9 },
+      keyVariants: [
+        { id: 100, semitoneOffset: 0, isOriginal: true, status: "ready", playable: true, errorMessage: null },
+        { id: 101, semitoneOffset: 5, isOriginal: false, status: "ready", playable: true, errorMessage: null },
+      ],
+      selectedKeyId: 101,
+    };
+    vi.mocked(manifestApi.getSongManifest).mockResolvedValue(transposedManifest);
+
+    const store = usePlayerStore();
+    await store.load(10, 2);
+
+    expect(manifestApi.getSongManifest).toHaveBeenCalledWith(10, 2);
+    expect(store.selectedKey).toBe(2);
+    expect(store.selectedKeyId).toBe(101);
+    store.reset();
+  });
+
+  it("exposes unavailable stems without initializing controls for them", async () => {
+    const partialManifest: SongManifest = {
+      ...manifest,
+      stems: [
+        manifest.stems[0],
+        { ...manifest.stems[1], status: "uploaded", url: null, codec: null, container: null },
+      ],
+    };
+    vi.mocked(manifestApi.getSongManifest).mockResolvedValue(partialManifest);
+
+    const store = usePlayerStore();
+    await store.load(10);
+
+    expect(store.playableStems.map((stem) => stem.id)).toEqual([1]);
+    expect(store.unavailableStems.map((stem) => stem.id)).toEqual([2]);
+    expect(store.mutedStems).toEqual({ 1: false });
+    expect(store.stemGains).toEqual({ 1: 0 });
     store.reset();
   });
 
@@ -179,6 +223,33 @@ describe("usePlayerStore", () => {
     expect(engineMocks.instances[0].initializeFromUserGesture).not.toHaveBeenCalled();
     pendingLoad.resolve();
     await loadPromise;
+    store.reset();
+  });
+
+  it("exposes download, decoding, and ready phases while controls stay gated", async () => {
+    vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
+    const pendingLoad = deferred<void>();
+    engineMocks.behavior.loadPromise = pendingLoad.promise;
+
+    const store = usePlayerStore();
+    const loadPromise = store.load(10);
+    await vi.waitFor(() => expect(engineMocks.behavior.progressCallback).not.toBeNull());
+
+    engineMocks.behavior.progressCallback?.({ stemId: 1, loadedBytes: 50, totalBytes: 100, ratio: 0.5 });
+    engineMocks.behavior.progressCallback?.({ stemId: 2, loadedBytes: 25, totalBytes: 100, ratio: 0.25 });
+    expect(store.audioLoadPhase).toBe("downloading");
+    expect(store.controlsEnabled).toBe(false);
+
+    engineMocks.behavior.progressCallback?.({ stemId: 1, loadedBytes: 100, totalBytes: 100, ratio: 1 });
+    engineMocks.behavior.progressCallback?.({ stemId: 2, loadedBytes: 100, totalBytes: 100, ratio: 1 });
+    expect(store.audioLoadPhase).toBe("decoding");
+    expect(store.controlsEnabled).toBe(false);
+
+    pendingLoad.resolve();
+    await loadPromise;
+
+    expect(store.audioLoadPhase).toBe("ready");
+    expect(store.controlsEnabled).toBe(true);
     store.reset();
   });
 

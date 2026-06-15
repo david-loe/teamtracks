@@ -8,6 +8,7 @@ import type { PlayerSettings, SongManifest } from "@/types/manifest";
 import { isPlayableStem } from "@/types/manifest";
 
 type PlaybackState = "stopped" | "paused" | "playing";
+export type AudioLoadPhase = "downloading" | "decoding" | "ready";
 
 const CURRENT_TIME_INTERVAL_MS = 200;
 const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
@@ -41,9 +42,19 @@ export const usePlayerStore = defineStore("player", () => {
   let playAttemptId = 0;
 
   const playableStems = computed(() => manifest.value?.stems.filter(isPlayableStem) ?? []);
+  const unavailableStems = computed(() => manifest.value?.stems.filter((stem) => !isPlayableStem(stem)) ?? []);
   const focusableStems = computed(() => playableStems.value.filter((stem) => stem.focusable));
   const keyVariants = computed(() => manifest.value?.keyVariants ?? []);
   const selectedKeyId = computed(() => manifest.value?.selectedKeyId ?? null);
+  const selectedKey = computed(() => {
+    if (!manifest.value) {
+      return null;
+    }
+    const selectedVariant = manifest.value.keyVariants.find((variant) => variant.id === manifest.value?.selectedKeyId);
+    return selectedVariant === undefined
+      ? null
+      : (manifest.value.song.originalKey + selectedVariant.semitoneOffset) % 12;
+  });
   const durationSeconds = computed(() => Math.max(0, (manifest.value?.song.durationMs ?? 0) / 1000));
   const durationMs = computed(() => manifest.value?.song.durationMs ?? null);
   const controlsEnabled = computed(() => audioLoaded.value && !loadingAudio.value);
@@ -56,8 +67,17 @@ export const usePlayerStore = defineStore("player", () => {
     }, 0);
     return Math.round((totalRatio / playableStems.value.length) * 100);
   });
+  const audioLoadPhase = computed<AudioLoadPhase | null>(() => {
+    if (audioLoaded.value) {
+      return "ready";
+    }
+    if (!loadingAudio.value) {
+      return null;
+    }
+    return loadProgressPercent.value < 100 ? "downloading" : "decoding";
+  });
 
-  async function load(songId: number, keyId: number | null = null): Promise<void> {
+  async function load(songId: number, key: number | null = null): Promise<void> {
     const requestId = ++pageLoadId;
     resetAudio();
     manifest.value = null;
@@ -66,7 +86,7 @@ export const usePlayerStore = defineStore("player", () => {
     loadError.value = null;
     playbackError.value = null;
     try {
-      const nextManifest = await manifestApi.getSongManifest(songId, keyId);
+      const nextManifest = await manifestApi.getSongManifest(songId, key);
       if (requestId !== pageLoadId) {
         return;
       }
@@ -197,13 +217,6 @@ export const usePlayerStore = defineStore("player", () => {
     applyFocus();
   }
 
-  async function selectKey(songId: number, keyId: number): Promise<void> {
-    if (keyId === selectedKeyId.value) {
-      return;
-    }
-    await load(songId, keyId);
-  }
-
   function setFocusGains(nextFocusedGainDb: number, nextBackgroundGainDb: number): void {
     focusedGainDb.value = nextFocusedGainDb;
     backgroundGainDb.value = nextBackgroundGainDb;
@@ -323,6 +336,7 @@ export const usePlayerStore = defineStore("player", () => {
     durationMs,
     loadProgress,
     loadProgressPercent,
+    audioLoadPhase,
     error,
     loadError,
     playbackError,
@@ -333,9 +347,11 @@ export const usePlayerStore = defineStore("player", () => {
     backgroundGainDb,
     playerSettings,
     playableStems,
+    unavailableStems,
     focusableStems,
     keyVariants,
     selectedKeyId,
+    selectedKey,
     controlsEnabled,
     load,
     retryAudioLoad: loadAudio,
@@ -347,7 +363,6 @@ export const usePlayerStore = defineStore("player", () => {
     setStemGain,
     setFocusStem,
     setFocusGains,
-    selectKey,
     reset,
   };
 });

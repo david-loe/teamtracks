@@ -22,6 +22,7 @@ export interface SongKeyVariant {
   semitoneOffset: number;
   isOriginal: boolean;
   status: "draft" | "ready" | "error";
+  playable: boolean;
   errorMessage: string | null;
 }
 

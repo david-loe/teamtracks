@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     )
     admin_session_hours: int = Field(default=12, validation_alias="ADMIN_SESSION_HOURS", ge=1, le=720)
     admin_cookie_secure: bool = Field(default=False, validation_alias="ADMIN_COOKIE_SECURE")
+    stem_cache_max_age_seconds: int = Field(
+        default=315_360_000,
+        validation_alias="STEM_CACHE_MAX_AGE_SECONDS",
+        ge=0,
+    )
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

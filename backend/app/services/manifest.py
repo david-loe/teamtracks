@@ -1,12 +1,12 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.domain import SongStatus, StemStatus
+from app.domain import StemStatus
+from app.models.app_settings import AppSettings
 from app.models.song import Song
 from app.models.song_key import SongKey
 from app.models.stem import Stem
 from app.models.stem_key_asset import StemKeyAsset
-from app.models.app_settings import AppSettings
 from app.schemas.manifest import ManifestKeyVariant, ManifestSong, ManifestStem, SongManifest
 
 
@@ -14,8 +14,7 @@ def build_song_manifest(song: Song, settings: AppSettings, selected_key_id: int 
     stems = sorted(song.stems, key=lambda stem: (stem.created_at, stem.id))
     key_variants = sorted(song.key_variants, key=lambda key: (not key.is_original, key.semitone_offset, key.id))
     selected_key = select_manifest_key(key_variants, selected_key_id)
-    assets_by_stem_id = assets_for_key(selected_key)
-    manifest_stems = [build_manifest_stem(song.id, selected_key, stem, assets_by_stem_id.get(stem.id)) for stem in stems]
+    manifest_stems = [build_manifest_stem(song, selected_key, stem) for stem in stems]
     playable = selected_key is not None and is_song_key_playable(song, selected_key, stems)
 
     return SongManifest(
@@ -34,6 +33,7 @@ def build_song_manifest(song: Song, settings: AppSettings, selected_key_id: int 
                 semitone_offset=key_variant.semitone_offset,
                 is_original=key_variant.is_original,
                 status=key_variant.status,
+                playable=is_song_key_playable(song, key_variant, stems),
                 error_message=key_variant.error_message,
             )
             for key_variant in key_variants
@@ -57,18 +57,17 @@ def get_song_for_manifest(db: Session, song_id: int) -> Song | None:
 
 
 def build_manifest_stem(
-    song_id: int,
+    song: Song,
     song_key: SongKey | None,
     stem: Stem,
-    asset: StemKeyAsset | None,
 ) -> ManifestStem:
-    is_playback_stem = (
-        song_key is not None
-        and asset is not None
-        and stem.status == StemStatus.READY.value
-        and asset.status == StemStatus.READY.value
-        and asset.file_path is not None
-    )
+    asset = resolve_stem_asset(song, song_key, stem)
+    is_playback_stem = song_key is not None and is_stem_asset_playable(stem, asset)
+    media_url = None
+    if is_playback_stem:
+        asset_version = asset.updated_at.strftime("%Y%m%d%H%M%S%f")
+        media_url = f"/media/songs/{song.id}/keys/{asset.song_key_id}/stems/{stem.id}.m4a?v={asset_version}"
+
     return ManifestStem(
         id=stem.id,
         name=stem.name,
@@ -76,7 +75,7 @@ def build_manifest_stem(
         key=stem.key,
         focusable=stem.role != "click_cue",
         status=asset.status if asset is not None else stem.status,
-        url=f"/media/songs/{song_id}/keys/{song_key.id}/stems/{stem.id}.m4a" if is_playback_stem else None,
+        url=media_url,
         codec=asset.codec if is_playback_stem else None,
         container="m4a" if is_playback_stem else None,
         channels=asset.channels if is_playback_stem else None,
@@ -94,27 +93,35 @@ def select_manifest_key(key_variants: list[SongKey], selected_key_id: int | None
     return next((key_variant for key_variant in key_variants if key_variant.is_original), key_variants[0] if key_variants else None)
 
 
-def assets_for_key(song_key: SongKey | None) -> dict[int, StemKeyAsset]:
+def resolve_stem_asset(song: Song, song_key: SongKey | None, stem: Stem) -> StemKeyAsset | None:
     if song_key is None:
-        return {}
-    return {asset.stem_id: asset for asset in song_key.stem_assets}
+        return None
+
+    asset_key = song_key
+    if stem.key is None:
+        original_key = next((key_variant for key_variant in song.key_variants if key_variant.is_original), None)
+        if original_key is None:
+            return None
+        asset_key = original_key
+
+    return next((asset for asset in stem.key_assets if asset.song_key_id == asset_key.id), None)
+
+
+def is_stem_asset_playable(stem: Stem, asset: StemKeyAsset | None) -> bool:
+    return (
+        stem.status == StemStatus.READY.value
+        and asset is not None
+        and asset.status == StemStatus.READY.value
+        and asset.file_path is not None
+    )
+
+
+def playable_stem_count(song: Song, song_key: SongKey, stems: list[Stem]) -> int:
+    if song.target_duration_ms is None or song.target_sample_rate is None:
+        return 0
+
+    return sum(is_stem_asset_playable(stem, resolve_stem_asset(song, song_key, stem)) for stem in stems)
 
 
 def is_song_key_playable(song: Song, song_key: SongKey, stems: list[Stem]) -> bool:
-    if song.status != SongStatus.READY.value:
-        return False
-    if song_key.status != SongStatus.READY.value:
-        return False
-    if song.target_duration_ms is None or song.target_sample_rate is None:
-        return False
-    if not stems:
-        return False
-
-    assets = assets_for_key(song_key)
-    return all(
-        stem.status == StemStatus.READY.value
-        and (asset := assets.get(stem.id)) is not None
-        and asset.status == StemStatus.READY.value
-        and asset.file_path is not None
-        for stem in stems
-    )
+    return playable_stem_count(song, song_key, stems) > 0

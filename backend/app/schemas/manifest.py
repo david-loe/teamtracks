@@ -21,6 +21,7 @@ class ManifestKeyVariant(BaseModel):
     semitone_offset: int = Field(alias="semitoneOffset")
     is_original: bool = Field(alias="isOriginal")
     status: SongStatus
+    playable: bool
     error_message: str | None = Field(default=None, alias="errorMessage")
 
     model_config = ConfigDict(populate_by_name=True)

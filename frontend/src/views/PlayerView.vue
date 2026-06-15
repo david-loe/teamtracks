@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from "vue";
-import { RouterLink } from "vue-router";
+import { computed, onUnmounted, watch } from "vue";
+import { RouterLink, useRoute, useRouter } from "vue-router";
+import type { LocationQueryValue } from "vue-router";
 
 import FocusControls from "@/components/FocusControls.vue";
 import LoadingProgress from "@/components/LoadingProgress.vue";
@@ -15,26 +16,45 @@ const props = defineProps<{
 
 const songId = computed(() => Number(props.id));
 const playerStore = usePlayerStore();
+const route = useRoute();
+const router = useRouter();
 
 const seekValue = computed(() => playerStore.currentTimeSeconds);
-
-onMounted(() => {
-  void loadPage();
-});
 
 onUnmounted(() => {
   playerStore.reset();
 });
 
-watch(songId, () => {
-  void loadPage();
-});
+watch(
+  [songId, () => route.query.key],
+  ([nextSongId, rawKey]) => {
+    void loadPage(nextSongId, rawKey);
+  },
+  { immediate: true },
+);
 
-async function loadPage(): Promise<void> {
-  if (!Number.isFinite(songId.value)) {
+watch(
+  () => playerStore.manifest,
+  (nextManifest) => {
+    const parsedKey = parseRouteKey(route.query.key);
+    if (nextManifest && parsedKey.valid && parsedKey.key === nextManifest.song.originalKey) {
+      void replaceKeyQuery(null);
+    }
+  },
+);
+
+async function loadPage(nextSongId: number, rawKey: LocationQueryValue | LocationQueryValue[] | undefined): Promise<void> {
+  if (!Number.isFinite(nextSongId)) {
     return;
   }
-  await playerStore.load(songId.value);
+
+  const parsedKey = parseRouteKey(rawKey);
+  if (!parsedKey.valid) {
+    await replaceKeyQuery(null);
+    return;
+  }
+
+  await playerStore.load(nextSongId, parsedKey.key);
 }
 
 function seek(event: Event): void {
@@ -42,12 +62,42 @@ function seek(event: Event): void {
 }
 
 function selectKey(event: Event): void {
-  playerStore.selectKey(songId.value, Number((event.target as HTMLSelectElement).value));
+  const key = Number((event.target as HTMLSelectElement).value);
+  const originalKey = playerStore.manifest?.song.originalKey;
+  void router.push({
+    query: queryWithKey(key === originalKey ? null : key),
+  });
 }
 
-function keyVariantLabel(semitoneOffset: number): string {
+function keyForVariant(semitoneOffset: number): number {
   const originalKey = playerStore.manifest?.song.originalKey ?? 0;
-  return formatSongKey((originalKey + semitoneOffset) % 12);
+  return (originalKey + semitoneOffset) % 12;
+}
+
+function parseRouteKey(rawKey: LocationQueryValue | LocationQueryValue[] | undefined):
+  | { valid: true; key: number | null }
+  | { valid: false } {
+  if (rawKey === undefined) {
+    return { valid: true, key: null };
+  }
+  if (typeof rawKey !== "string" || !/^(?:0|[1-9]|1[01])$/.test(rawKey)) {
+    return { valid: false };
+  }
+  return { valid: true, key: Number(rawKey) };
+}
+
+function queryWithKey(key: number | null) {
+  const query = { ...route.query };
+  if (key === null) {
+    delete query.key;
+  } else {
+    query.key = String(key);
+  }
+  return query;
+}
+
+async function replaceKeyQuery(key: number | null): Promise<void> {
+  await router.replace({ query: queryWithKey(key) });
 }
 </script>
 
@@ -82,7 +132,7 @@ function keyVariantLabel(semitoneOffset: number): string {
       <template v-else-if="playerStore.manifest">
         <div v-if="!playerStore.manifest.playable" class="empty-state">
           <h2>Nicht abspielbereit</h2>
-          <p class="muted">Der Song braucht ein vollständiges Manifest mit ausschließlich bereiten Stems.</p>
+          <p class="muted">Für die gewählte Tonart ist noch kein Stem abspielbereit.</p>
           <div class="status-list">
             <span
               v-for="stem in playerStore.manifest.stems"
@@ -101,26 +151,39 @@ function keyVariantLabel(semitoneOffset: number): string {
             <select
               id="player-key"
               name="playerKey"
-              :value="playerStore.selectedKeyId ?? ''"
-              :disabled="playerStore.loadingAudio || playerStore.startingPlayback"
+              :value="playerStore.selectedKey ?? ''"
               @change="selectKey"
             >
               <option
                 v-for="keyVariant in playerStore.keyVariants"
                 :key="keyVariant.id"
-                :value="keyVariant.id"
-                :disabled="keyVariant.status !== 'ready'"
+                :value="keyForVariant(keyVariant.semitoneOffset)"
+                :disabled="!keyVariant.playable"
               >
-                {{ keyVariantLabel(keyVariant.semitoneOffset) }}{{ keyVariant.isOriginal ? " (Original)" : "" }}
+                {{ formatSongKey(keyForVariant(keyVariant.semitoneOffset)) }}{{ keyVariant.isOriginal ? " (Original)" : "" }}
               </option>
             </select>
           </label>
 
+          <div v-if="playerStore.unavailableStems.length > 0" class="partial-stems-notice">
+            <p class="muted">In dieser Tonart nicht verfügbare Stems:</p>
+            <div class="status-list">
+              <span
+                v-for="stem in playerStore.unavailableStems"
+                :key="stem.id"
+                class="status-pill"
+              >
+                {{ stem.name }}
+              </span>
+            </div>
+          </div>
+
           <LoadingProgress
-            v-if="playerStore.loadingAudio || playerStore.loadProgressPercent > 0"
+            v-if="playerStore.audioLoadPhase"
             :stems="playerStore.playableStems"
             :progress="playerStore.loadProgress"
             :percent="playerStore.loadProgressPercent"
+            :phase="playerStore.audioLoadPhase"
           />
 
           <div class="transport">

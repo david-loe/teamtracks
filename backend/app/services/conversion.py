@@ -11,6 +11,7 @@ from app.models.song import Song, utc_now
 from app.models.song_key import SongKey
 from app.models.stem import Stem
 from app.models.stem_key_asset import StemKeyAsset
+from app.services.manifest import resolve_stem_asset
 from app.services.probing import AudioMetadata, FFprobeService, ProbeError
 from app.services.storage import StorageService
 
@@ -168,7 +169,12 @@ class ConversionService:
             file_size_bytes=stem.file_size_bytes,
             bitrate_kbps=stem.bitrate_kbps,
         )
-        sync_song_key_status(db, song, song_key)
+        if stem.key is None:
+            key_variants = db.scalars(select(SongKey).where(SongKey.song_id == song.id)).all()
+            for key_variant in key_variants:
+                sync_song_key_status(db, song, key_variant)
+        else:
+            sync_song_key_status(db, song, song_key)
         db.flush()
 
     def transpose_song_key(
@@ -203,29 +209,35 @@ class ConversionService:
         )
         if not stems:
             raise ConversionError("Song has no stems to transpose")
-        if any(stem.status != StemStatus.READY.value or stem.source_path is None for stem in stems):
-            raise ConversionError("All stems must be ready and have source files before transposition")
+        if any(stem.status != StemStatus.READY.value for stem in stems):
+            raise ConversionError("All stems must be ready before transposition")
+        if any(stem.key is not None and stem.source_path is None for stem in stems):
+            raise ConversionError("All key-dependent stems need source files before transposition")
 
         targets = self.ensure_song_targets(db, song, target_sample_rate)
         original_song_key = ensure_song_key(db, song, 0, is_original=True)
         for stem in stems:
-            if stem.key is None and target_key != song.original_key:
+            if stem.key is None:
                 original_asset = get_stem_key_asset(db, original_song_key.id, stem.id)
-                if original_asset is None or original_asset.status != StemStatus.READY.value or original_asset.file_path is None:
+                if (
+                    original_asset is None
+                    or original_asset.status != StemStatus.READY.value
+                    or original_asset.file_path is None
+                    or not Path(original_asset.file_path).is_file()
+                ):
                     raise ConversionError(f"Original asset missing for key-independent stem {stem.id}")
-                copy_asset_metadata(db, song_key=song_key, stem=stem, source_asset=original_asset)
-            else:
-                self.convert_stem_for_key(
-                    db,
-                    song=song,
-                    song_key=song_key,
-                    stem=stem,
-                    targets=targets,
-                    target_key=target_key,
-                    duration_tolerance_ms=duration_tolerance_ms,
-                    mono_bitrate_kbps=mono_bitrate_kbps,
-                    stereo_bitrate_kbps=stereo_bitrate_kbps,
-                )
+                continue
+            self.convert_stem_for_key(
+                db,
+                song=song,
+                song_key=song_key,
+                stem=stem,
+                targets=targets,
+                target_key=target_key,
+                duration_tolerance_ms=duration_tolerance_ms,
+                mono_bitrate_kbps=mono_bitrate_kbps,
+                stereo_bitrate_kbps=stereo_bitrate_kbps,
+            )
         song_key.status = SongStatus.READY.value
         song_key.error_message = None
         db.flush()
@@ -486,31 +498,9 @@ def upsert_stem_key_asset(
     asset.file_size_bytes = file_size_bytes
     asset.bitrate_kbps = bitrate_kbps
     asset.error_message = None
+    asset.updated_at = utc_now()
     db.flush()
     return asset
-
-
-def copy_asset_metadata(
-    db: Session,
-    *,
-    song_key: SongKey,
-    stem: Stem,
-    source_asset: StemKeyAsset,
-) -> StemKeyAsset:
-    if source_asset.file_path is None:
-        raise ConversionError("Source asset has no file path")
-    return upsert_stem_key_asset(
-        db,
-        song_key=song_key,
-        stem=stem,
-        file_path=Path(source_asset.file_path),
-        codec=source_asset.codec,
-        sample_rate=source_asset.sample_rate,
-        channels=source_asset.channels,
-        duration_ms=source_asset.duration_ms,
-        file_size_bytes=source_asset.file_size_bytes,
-        bitrate_kbps=source_asset.bitrate_kbps,
-    )
 
 
 def mark_key_assets_error(db: Session, song_key: SongKey, message: str) -> None:
@@ -525,10 +515,9 @@ def sync_song_key_status(db: Session, song: Song, song_key: SongKey) -> None:
     if not stems:
         song_key.status = SongStatus.DRAFT.value
         return
-    assets_by_stem_id = {asset.stem_id: asset for asset in song_key.stem_assets}
     if all(
         stem.status == StemStatus.READY.value
-        and (asset := assets_by_stem_id.get(stem.id)) is not None
+        and (asset := resolve_stem_asset(song, song_key, stem)) is not None
         and asset.status == StemStatus.READY.value
         and asset.file_path is not None
         for stem in stems

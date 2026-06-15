@@ -80,20 +80,21 @@ def list_key_assets(song_id: int, db: Session = Depends(get_db)) -> list[StemKey
     inventory: list[StemKeyAssetInventoryItemRead] = []
     for stem in stems:
         variants: list[StemKeyAssetVariantRead] = []
-        for song_key in song_keys:
-            asset = assets_by_key_and_stem.get((song_key.id, stem.id))
-            if asset is None and song_key.status != SongStatus.ERROR.value:
-                continue
-            target_key = (song.original_key + song_key.semitone_offset) % 12
-            variants.append(
-                StemKeyAssetVariantRead(
-                    song_key_id=song_key.id,
-                    semitone_offset=song_key.semitone_offset,
-                    target_key=target_key,
-                    status=asset.status if asset is not None else song_key.status,
-                    error_message=(asset.error_message if asset is not None else None) or song_key.error_message,
+        if stem.key is not None:
+            for song_key in song_keys:
+                asset = assets_by_key_and_stem.get((song_key.id, stem.id))
+                if asset is None and song_key.status != SongStatus.ERROR.value:
+                    continue
+                target_key = (song.original_key + song_key.semitone_offset) % 12
+                variants.append(
+                    StemKeyAssetVariantRead(
+                        song_key_id=song_key.id,
+                        semitone_offset=song_key.semitone_offset,
+                        target_key=target_key,
+                        status=asset.status if asset is not None else song_key.status,
+                        error_message=(asset.error_message if asset is not None else None) or song_key.error_message,
+                    )
                 )
-            )
         inventory.append(
             StemKeyAssetInventoryItemRead(
                 stem_id=stem.id,

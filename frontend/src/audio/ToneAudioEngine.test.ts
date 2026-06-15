@@ -53,7 +53,7 @@ const manifest: SongManifest = {
     durationMs: 100000,
     sampleRate: 48000,
   },
-  keyVariants: [{ id: 100, semitoneOffset: 0, isOriginal: true, status: "ready", errorMessage: null }],
+  keyVariants: [{ id: 100, semitoneOffset: 0, isOriginal: true, status: "ready", playable: true, errorMessage: null }],
   selectedKeyId: 100,
   playable: true,
   stems: [
