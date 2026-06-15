@@ -9,6 +9,7 @@ vi.mock("@/api/songs", () => ({
   listSongs: vi.fn(),
   createSong: vi.fn(),
   getSong: vi.fn(),
+  updateSong: vi.fn(),
   deleteSong: vi.fn(),
 }));
 
@@ -16,8 +17,10 @@ const songList: SongListItem[] = [
   {
     id: 1,
     title: "First Song",
+    artist: "First Artist",
     slug: "first-song",
     status: "ready",
+    originalKey: 0,
     stemCount: 2,
     readyStemCount: 2,
     durationMs: 120000,
@@ -27,9 +30,11 @@ const songList: SongListItem[] = [
 const song: Song = {
   id: 1,
   title: "First Song",
+  artist: "First Artist",
   slug: "first-song",
   description: null,
   status: "ready",
+  originalKey: 0,
   targetSampleRate: 48000,
   targetDurationMs: 120000,
   createdAt: "2026-01-01T00:00:00Z",
@@ -68,11 +73,31 @@ describe("useSongsStore", () => {
     vi.mocked(songsApi.listSongs).mockResolvedValue(songList);
 
     const store = useSongsStore();
-    const created = await store.createSong({ title: "First Song", slug: "first-song" });
+    const created = await store.createSong({ title: "First Song", artist: "First Artist", slug: "first-song", originalKey: 0 });
 
     expect(created).toEqual(song);
     expect(songsApi.listSongs).toHaveBeenCalledTimes(1);
     expect(store.songs).toEqual(songList);
+  });
+
+  it("updates a song and refreshes the list", async () => {
+    const updatedSong = { ...song, title: "Updated Song", artist: "Updated Artist", originalKey: 5 };
+    vi.mocked(songsApi.updateSong).mockResolvedValue(updatedSong);
+    vi.mocked(songsApi.listSongs).mockResolvedValue([
+      { ...songList[0], title: "Updated Song", artist: "Updated Artist", originalKey: 5 },
+    ]);
+
+    const store = useSongsStore();
+    const updated = await store.updateSong(1, {
+      title: "Updated Song",
+      artist: "Updated Artist",
+      originalKey: 5,
+    });
+
+    expect(updated).toEqual(updatedSong);
+    expect(store.currentSong).toEqual(updatedSong);
+    expect(songsApi.listSongs).toHaveBeenCalledTimes(1);
+    expect(store.songs[0].artist).toBe("Updated Artist");
   });
 
   it("deletes a song locally after the API succeeds", async () => {

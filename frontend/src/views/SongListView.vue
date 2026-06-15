@@ -24,13 +24,13 @@ async function search(): Promise<void> {
   <section>
     <div class="page-header"><div><p class="eyebrow">TeamTracks</p><h1>Songs</h1><p class="muted">Abspielbereite Songs suchen und öffnen.</p></div></div>
     <section class="panel">
-      <form class="search-form" @submit.prevent="search"><input v-model="query" type="search" placeholder="Titel, Slug oder Beschreibung" /><button class="button button-primary" :disabled="loading">Suchen</button></form>
+      <form class="search-form" @submit.prevent="search"><input v-model="query" type="search" placeholder="Titel, Künstler, Slug oder Beschreibung" /><button class="button button-primary" :disabled="loading">Suchen</button></form>
       <p v-if="error" class="error-text">{{ error }}</p>
       <p v-if="loading" class="muted">Songs werden geladen...</p>
       <p v-else-if="songs.length === 0" class="muted">Keine abspielbereiten Songs gefunden.</p>
       <div v-else class="public-song-list section-block">
         <RouterLink v-for="song in songs" :key="song.id" class="song-card" :to="`/songs/${song.id}`">
-          <div><strong>{{ song.title }}</strong><span class="table-subtext">{{ song.slug }}</span></div>
+          <div><strong>{{ song.title }}</strong><span class="table-subtext">{{ song.artist || "Unbekannter Künstler" }} · {{ song.slug }}</span></div>
           <span>{{ formatDuration(song.durationMs) }}</span>
         </RouterLink>
       </div>

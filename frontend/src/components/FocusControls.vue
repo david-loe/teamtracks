@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { PlayableStemManifestItem } from "@/types/manifest";
 import type { PlayerSettings } from "@/types/manifest";
+import { formatSongKey } from "@/types/keys";
 
 const props = defineProps<{
   stems: PlayableStemManifestItem[];
@@ -37,7 +38,7 @@ function updateBackgroundGain(value: string): void {
         @change="$emit('setFocusStem', ($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null)"
       >
         <option value="">Aus</option>
-        <option v-for="stem in stems" :key="stem.id" :value="stem.id">{{ stem.name }}</option>
+        <option v-for="stem in stems" :key="stem.id" :value="stem.id">{{ stem.name }} · {{ formatSongKey(stem.key) }}</option>
       </select>
     </label>
 

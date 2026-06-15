@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api.songs import get_song_or_404
 from app.db.session import get_db
-from app.domain import ConversionJobStatus, StemStatus
+from app.domain import ConversionJobStatus, ConversionJobType, StemStatus
 from app.models.conversion_job import ConversionJob
 from app.models.stem import Stem
 from app.schemas.conversion_job import ConversionJobBatchRead, ConversionJobCreate, ConversionJobRead
@@ -42,6 +42,7 @@ def create_conversion_jobs(
         ConversionJob(
             song_id=song_id,
             stem_id=stem.id,
+            job_type=ConversionJobType.STEM_CONVERSION.value,
             status=ConversionJobStatus.QUEUED.value,
             requested_by=payload.requested_by,
             mono_bitrate_kbps=settings.mono_bitrate_kbps,

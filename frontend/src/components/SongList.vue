@@ -3,6 +3,7 @@ import { RouterLink } from "vue-router";
 
 import type { SongListItem } from "@/api/songs";
 import { formatDuration } from "@/types/format";
+import { formatSongKey } from "@/types/keys";
 
 defineProps<{
   songs: SongListItem[];
@@ -30,7 +31,9 @@ defineEmits<{
         <tr v-for="song in songs" :key="song.id">
           <td>
             <strong>{{ song.title }}</strong>
-            <span class="table-subtext">{{ song.slug }}</span>
+            <span class="table-subtext">
+              {{ song.artist || "Unbekannter Künstler" }} · {{ song.slug }} · Original {{ formatSongKey(song.originalKey) }}
+            </span>
           </td>
           <td><span class="status-pill" :class="`status-${song.status}`">{{ song.status }}</span></td>
           <td>{{ song.readyStemCount }} / {{ song.stemCount }} ready</td>

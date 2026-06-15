@@ -4,23 +4,28 @@ import { useRouter } from "vue-router";
 
 import SongList from "@/components/SongList.vue";
 import { useSongsStore } from "@/stores/songs";
+import { SONG_KEYS } from "@/types/keys";
 
 const router = useRouter();
 const songsStore = useSongsStore();
-const form = reactive({ title: "", slug: "", description: "" });
+const form = reactive({ title: "", artist: "", slug: "", description: "", originalKey: 0 });
 
 onMounted(() => void songsStore.fetchSongs());
 
 async function createSong(): Promise<void> {
   const song = await songsStore.createSong({
     title: form.title.trim(),
+    artist: form.artist.trim(),
     slug: form.slug.trim(),
     description: form.description.trim() || null,
+    originalKey: form.originalKey,
   });
   if (song) {
     form.title = "";
+    form.artist = "";
     form.slug = "";
     form.description = "";
+    form.originalKey = 0;
     await router.push(`/admin/songs/${song.id}`);
   }
 }
@@ -44,7 +49,12 @@ async function deleteSong(songId: number): Promise<void> {
         <h2>Neuer Song</h2>
         <form class="stack-form" autocomplete="off" @submit.prevent="createSong">
           <label for="song-title">Titel</label><input id="song-title" v-model="form.title" name="title" maxlength="200" required @blur="slugFromTitle" />
+          <label for="song-artist">Künstler</label><input id="song-artist" v-model="form.artist" name="artist" maxlength="200" />
           <label for="song-slug">Slug</label><input id="song-slug" v-model="form.slug" name="slug" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" maxlength="200" required />
+          <label for="song-original-key">Originaltonart</label>
+          <select id="song-original-key" v-model="form.originalKey" name="originalKey">
+            <option v-for="songKey in SONG_KEYS" :key="songKey.value" :value="songKey.value">{{ songKey.label }}</option>
+          </select>
           <label for="song-description">Beschreibung</label><textarea id="song-description" v-model="form.description" name="description" rows="4" />
           <button class="button button-primary" :disabled="songsStore.saving">{{ songsStore.saving ? "Wird angelegt..." : "Song anlegen" }}</button>
         </form>

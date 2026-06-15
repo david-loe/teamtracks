@@ -8,6 +8,9 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app.services.conversion import ConversionService
+from app.models.song_key import SongKey
+from app.models.stem import Stem
+from app.models.stem_key_asset import StemKeyAsset
 
 
 def create_song(client: TestClient) -> dict[str, Any]:
@@ -112,8 +115,10 @@ def test_conversion_jobs_convert_mono_and_stereo_to_m4a(client: TestClient) -> N
     assert stems[stereo_stem["id"]]["bitrateKbps"] == 160
 
     storage = client.storage  # type: ignore[attr-defined]
-    mono_output = Path(storage.storage_root) / "songs" / str(song["id"]) / "converted" / f"{mono_stem['id']}.m4a"
-    stereo_output = Path(storage.storage_root) / "songs" / str(song["id"]) / "converted" / f"{stereo_stem['id']}.m4a"
+    manifest = client.get(f"/api/songs/{song['id']}/manifest").json()
+    selected_key_id = manifest["selectedKeyId"]
+    mono_output = Path(storage.storage_root) / "songs" / str(song["id"]) / "keys" / str(selected_key_id) / f"{mono_stem['id']}.m4a"
+    stereo_output = Path(storage.storage_root) / "songs" / str(song["id"]) / "keys" / str(selected_key_id) / f"{stereo_stem['id']}.m4a"
     assert mono_output.is_file()
     assert stereo_output.is_file()
     assert first_audio_stream(probe_audio(mono_output))["channels"] == 1
@@ -178,3 +183,135 @@ def test_duration_difference_over_tolerance_marks_stem_error(client: TestClient)
     song_response = client.get(f"/api/songs/{song['id']}")
     assert song_response.status_code == 200
     assert song_response.json()["status"] == "error"
+
+
+def test_transpose_song_creates_target_key_assets_and_reuses_keyless_stems(client: TestClient) -> None:
+    song = create_song(client)
+    drums = upload_stem(client, song["id"], name="drums", role="drums", channels=2, sample_rate=48000)
+    bass = upload_stem(client, song["id"], name="bass", role="bass", channels=1, sample_rate=48000)
+
+    session_factory = client.session_factory  # type: ignore[attr-defined]
+    with session_factory() as db:
+        bass_stem = db.get(Stem, bass["id"])
+        assert bass_stem is not None
+        bass_stem.key = 0
+        db.commit()
+
+    create_response = client.post(f"/api/songs/{song['id']}/conversion-jobs", json={})
+    assert create_response.status_code == 201
+    process_jobs(client, create_response.json()["jobIds"])
+
+    transpose_response = client.post(f"/api/admin/songs/{song['id']}/transpose", json={"targetKeys": [2]})
+    assert transpose_response.status_code == 200
+    transpose_jobs = transpose_response.json()
+    assert transpose_jobs["status"] == "queued"
+    assert len(transpose_jobs["jobIds"]) == 1
+
+    with session_factory() as db:
+        assert db.query(SongKey).filter_by(song_id=song["id"], semitone_offset=2).one_or_none() is None
+
+    process_jobs(client, transpose_jobs["jobIds"])
+
+    job_response = client.get(f"/api/admin/conversion-jobs/{transpose_jobs['jobIds'][0]}")
+    assert job_response.status_code == 200
+    job = job_response.json()
+    assert job["jobType"] == "song_transposition"
+    assert job["targetKey"] == 2
+    assert job["semitoneOffset"] == 2
+    assert job["status"] == "succeeded"
+    assert job["songKeyId"] is not None
+    target_key = {"id": job["songKeyId"]}
+
+    manifest_response = client.get(f"/api/admin/songs/{song['id']}/manifest", params={"keyId": target_key["id"]})
+    assert manifest_response.status_code == 200
+    manifest = manifest_response.json()
+    assert manifest["selectedKeyId"] == target_key["id"]
+    assert manifest["playable"] is True
+    assert {stem["id"]: stem["url"] for stem in manifest["stems"]} == {
+        drums["id"]: f"/media/songs/{song['id']}/keys/{target_key['id']}/stems/{drums['id']}.m4a",
+        bass["id"]: f"/media/songs/{song['id']}/keys/{target_key['id']}/stems/{bass['id']}.m4a",
+    }
+
+    storage = client.storage  # type: ignore[attr-defined]
+    with session_factory() as db:
+        original_key = db.query(SongKey).filter_by(song_id=song["id"], semitone_offset=0).one()
+        target_key_model = db.query(SongKey).filter_by(song_id=song["id"], semitone_offset=2).one()
+        original_drums_asset = db.query(StemKeyAsset).filter_by(song_key_id=original_key.id, stem_id=drums["id"]).one()
+        target_drums_asset = db.query(StemKeyAsset).filter_by(song_key_id=target_key_model.id, stem_id=drums["id"]).one()
+        target_bass_asset = db.query(StemKeyAsset).filter_by(song_key_id=target_key_model.id, stem_id=bass["id"]).one()
+        assert target_drums_asset.file_path == original_drums_asset.file_path
+        assert target_bass_asset.file_path == str(storage.key_asset_path(song["id"], target_key_model.id, bass["id"]))
+        assert Path(target_bass_asset.file_path).is_file()
+
+    inventory_response = client.get(f"/api/admin/songs/{song['id']}/key-assets")
+    assert inventory_response.status_code == 200
+    inventory = {item["stemId"]: item for item in inventory_response.json()}
+    assert {variant["targetKey"] for variant in inventory[drums["id"]]["variants"]} == {0, 2}
+    assert {variant["targetKey"] for variant in inventory[bass["id"]]["variants"]} == {0, 2}
+    assert all(variant["status"] == "ready" for item in inventory.values() for variant in item["variants"])
+
+
+def test_transpose_job_failure_marks_job_and_song_key_error(client: TestClient) -> None:
+    song = create_song(client)
+    bass = upload_stem(client, song["id"], name="bass", role="bass", channels=1, sample_rate=48000)
+
+    session_factory = client.session_factory  # type: ignore[attr-defined]
+    with session_factory() as db:
+        bass_stem = db.get(Stem, bass["id"])
+        assert bass_stem is not None
+        bass_stem.key = 0
+        db.commit()
+
+    create_response = client.post(f"/api/songs/{song['id']}/conversion-jobs", json={})
+    assert create_response.status_code == 201
+    process_jobs(client, create_response.json()["jobIds"])
+
+    transpose_response = client.post(f"/api/admin/songs/{song['id']}/transpose", json={"targetKeys": [2]})
+    assert transpose_response.status_code == 200
+    job_id = transpose_response.json()["jobIds"][0]
+
+    with session_factory() as db:
+        bass_stem = db.get(Stem, bass["id"])
+        assert bass_stem is not None
+        bass_stem.source_path = str(Path(bass_stem.source_path or "").with_name("missing.wav"))
+        db.commit()
+
+    process_jobs(client, [job_id])
+
+    job_response = client.get(f"/api/admin/conversion-jobs/{job_id}")
+    assert job_response.status_code == 200
+    failed_job = job_response.json()
+    assert failed_job["status"] == "failed"
+    assert failed_job["errorMessage"]
+    assert failed_job["songKeyId"] is not None
+
+    with session_factory() as db:
+        song_key = db.get(SongKey, failed_job["songKeyId"])
+        assert song_key is not None
+        assert song_key.status == "error"
+        assert song_key.error_message == failed_job["errorMessage"]
+
+
+def test_original_key_change_relabels_relative_key_variants_without_reprocessing(client: TestClient) -> None:
+    song = create_song(client)
+    upload_stem(client, song["id"], name="drums", role="drums", channels=2, sample_rate=48000)
+    create_response = client.post(f"/api/songs/{song['id']}/conversion-jobs", json={})
+    assert create_response.status_code == 201
+    process_jobs(client, create_response.json()["jobIds"])
+
+    transpose_response = client.post(f"/api/admin/songs/{song['id']}/transpose", json={"targetKeys": [2]})
+    assert transpose_response.status_code == 200
+    transpose_job_id = transpose_response.json()["jobIds"][0]
+    process_jobs(client, [transpose_job_id])
+    target_variant = client.get(f"/api/admin/conversion-jobs/{transpose_job_id}").json()
+
+    update_response = client.patch(f"/api/admin/songs/{song['id']}", json={"originalKey": 5})
+    assert update_response.status_code == 200
+    assert update_response.json()["originalKey"] == 5
+
+    manifest_response = client.get(f"/api/admin/songs/{song['id']}/manifest", params={"keyId": target_variant["songKeyId"]})
+    assert manifest_response.status_code == 200
+    manifest = manifest_response.json()
+    variants = {variant["id"]: variant for variant in manifest["keyVariants"]}
+    assert manifest["song"]["originalKey"] == 5
+    assert variants[manifest["selectedKeyId"]]["semitoneOffset"] == 2

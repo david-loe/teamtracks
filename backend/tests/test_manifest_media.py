@@ -5,7 +5,9 @@ from fastapi.testclient import TestClient
 
 from app.domain import SongStatus, StemStatus
 from app.models.song import Song
+from app.models.song_key import SongKey
 from app.models.stem import Stem
+from app.models.stem_key_asset import StemKeyAsset
 
 
 def create_song(client: TestClient) -> dict[str, Any]:
@@ -48,6 +50,24 @@ def mark_stem_ready(client: TestClient, song_id: int, stem_id: int, *, write_fil
         stem.duration_ms = 184320
         stem.file_size_bytes = 2210340
         stem.bitrate_kbps = 160
+        song_key = db.query(SongKey).filter_by(song_id=song_id, semitone_offset=0).one_or_none()
+        if song_key is None:
+            song_key = SongKey(song_id=song_id, semitone_offset=0, is_original=True, status=SongStatus.READY.value)
+            db.add(song_key)
+            db.flush()
+        song_key.status = SongStatus.READY.value
+        asset = db.query(StemKeyAsset).filter_by(song_key_id=song_key.id, stem_id=stem_id).one_or_none()
+        if asset is None:
+            asset = StemKeyAsset(song_key_id=song_key.id, stem_id=stem_id)
+            db.add(asset)
+        asset.status = StemStatus.READY.value
+        asset.file_path = str(converted_path)
+        asset.codec = "aac-lc"
+        asset.channels = 2
+        asset.sample_rate = 48000
+        asset.duration_ms = 184320
+        asset.file_size_bytes = 2210340
+        asset.bitrate_kbps = 160
         db.commit()
 
     return converted_path
@@ -64,18 +84,31 @@ def test_manifest_includes_ready_playback_stems(client: TestClient) -> None:
     assert manifest["song"] == {
         "id": song["id"],
         "title": "Manifest Song",
+        "artist": "",
         "slug": "manifest-song",
+        "originalKey": 0,
         "durationMs": 184320,
         "sampleRate": 48000,
     }
+    assert manifest["keyVariants"] == [
+        {
+            "id": manifest["selectedKeyId"],
+            "semitoneOffset": 0,
+            "isOriginal": True,
+            "status": "ready",
+            "errorMessage": None,
+        }
+    ]
     assert manifest["playable"] is True
     assert manifest["stems"] == [
         {
             "id": ready_stem["id"],
             "name": "drums",
             "role": "drums",
+            "key": None,
+            "focusable": True,
             "status": "ready",
-            "url": f"/media/songs/{song['id']}/stems/{ready_stem['id']}.m4a",
+            "url": f"/media/songs/{song['id']}/keys/{manifest['selectedKeyId']}/stems/{ready_stem['id']}.m4a",
             "codec": "aac-lc",
             "container": "m4a",
             "channels": 2,
@@ -99,7 +132,9 @@ def test_manifest_is_not_playable_with_non_ready_stems(client: TestClient) -> No
     manifest = response.json()
     assert manifest["playable"] is False
     stems = {stem["id"]: stem for stem in manifest["stems"]}
-    assert stems[ready_stem["id"]]["url"] == f"/media/songs/{song['id']}/stems/{ready_stem['id']}.m4a"
+    assert stems[ready_stem["id"]]["url"] == (
+        f"/media/songs/{song['id']}/keys/{manifest['selectedKeyId']}/stems/{ready_stem['id']}.m4a"
+    )
     assert stems[pending_stem["id"]]["status"] == "uploaded"
     assert stems[pending_stem["id"]]["url"] is None
     assert stems[pending_stem["id"]]["codec"] is None
@@ -110,7 +145,8 @@ def test_media_serves_ready_m4a_with_headers(client: TestClient) -> None:
     stem = upload_stem(client, song["id"])
     mark_stem_ready(client, song["id"], stem["id"])
 
-    url = f"/media/songs/{song['id']}/stems/{stem['id']}.m4a"
+    manifest = client.get(f"/api/songs/{song['id']}/manifest").json()
+    url = f"/media/songs/{song['id']}/keys/{manifest['selectedKeyId']}/stems/{stem['id']}.m4a"
     response = client.get(url)
     assert response.status_code == 200
     assert response.content == b"m4a-data"
@@ -128,12 +164,13 @@ def test_media_rejects_missing_and_not_ready_files(client: TestClient) -> None:
     song = create_song(client)
     stem = upload_stem(client, song["id"])
 
-    not_ready_response = client.get(f"/media/songs/{song['id']}/stems/{stem['id']}.m4a")
+    not_ready_response = client.get(f"/media/songs/{song['id']}/keys/999/stems/{stem['id']}.m4a")
     assert not_ready_response.status_code == 404
 
     mark_stem_ready(client, song["id"], stem["id"], write_file=False)
-    missing_file_response = client.get(f"/media/songs/{song['id']}/stems/{stem['id']}.m4a")
+    manifest = client.get(f"/api/songs/{song['id']}/manifest").json()
+    missing_file_response = client.get(f"/media/songs/{song['id']}/keys/{manifest['selectedKeyId']}/stems/{stem['id']}.m4a")
     assert missing_file_response.status_code == 404
 
-    wrong_song_response = client.get(f"/media/songs/{song['id'] + 1}/stems/{stem['id']}.m4a")
+    wrong_song_response = client.get(f"/media/songs/{song['id'] + 1}/keys/{manifest['selectedKeyId']}/stems/{stem['id']}.m4a")
     assert wrong_song_response.status_code == 404

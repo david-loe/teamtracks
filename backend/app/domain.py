@@ -13,6 +13,7 @@ class StemRole(StrEnum):
     VOCALS = "vocals"
     GUITAR = "guitar"
     KEYS = "keys"
+    CLICK_CUE = "click_cue"
     OTHER = "other"
 
 
@@ -29,3 +30,8 @@ class ConversionJobStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+class ConversionJobType(StrEnum):
+    STEM_CONVERSION = "stem_conversion"
+    SONG_TRANSPOSITION = "song_transposition"

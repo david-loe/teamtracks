@@ -5,6 +5,8 @@ import type { ConversionJob } from "@/api/conversion";
 import * as conversionApi from "@/api/conversion";
 import type { Stem, StemImportInput, StemUploadInput } from "@/api/stems";
 import * as stemsApi from "@/api/stems";
+import type { StemKeyAssetInventoryItem } from "@/api/transposition";
+import * as transpositionApi from "@/api/transposition";
 
 const ACTIVE_JOB_STATUSES = new Set(["queued", "running"]);
 const POLL_INTERVAL_MS = 2500;
@@ -12,19 +14,26 @@ const POLL_INTERVAL_MS = 2500;
 export const useAdminStemsStore = defineStore("adminStems", () => {
   const stems = ref<Stem[]>([]);
   const jobs = ref<ConversionJob[]>([]);
+  const keyAssets = ref<StemKeyAssetInventoryItem[]>([]);
   const loading = ref(false);
   const loadingJobs = ref(false);
+  const loadingKeyAssets = ref(false);
   const uploading = ref(false);
   const importing = ref(false);
   const deletingId = ref<number | null>(null);
   const startingConversion = ref(false);
+  const transposing = ref(false);
   const error = ref<string | null>(null);
   const jobError = ref<string | null>(null);
+  const transposeError = ref<string | null>(null);
   const pollingSongId = ref<number | null>(null);
   let pollTimer: number | null = null;
 
   const activeJobs = computed(() => jobs.value.filter((job) => ACTIVE_JOB_STATUSES.has(job.status)));
   const hasActiveJobs = computed(() => activeJobs.value.length > 0);
+  const hasActiveTranspositionJobs = computed(() =>
+    activeJobs.value.some((job) => job.jobType === "song_transposition"),
+  );
   const convertibleStems = computed(() =>
     stems.value.filter((stem) => stem.status === "uploaded" || stem.status === "error"),
   );
@@ -55,6 +64,17 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
       jobError.value = getErrorMessage(err);
     } finally {
       loadingJobs.value = false;
+    }
+  }
+
+  async function loadKeyAssets(songId: number): Promise<void> {
+    loadingKeyAssets.value = true;
+    try {
+      keyAssets.value = await transpositionApi.listKeyAssets(songId);
+    } catch (err) {
+      transposeError.value = getErrorMessage(err);
+    } finally {
+      loadingKeyAssets.value = false;
     }
   }
 
@@ -109,7 +129,7 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     jobError.value = null;
     try {
       await conversionApi.createConversionJobs(songId, { requestedBy: "admin-ui" });
-      await Promise.all([load(songId), loadJobs(songId)]);
+      await Promise.all([load(songId), loadJobs(songId), loadKeyAssets(songId)]);
       startPolling(songId);
       return true;
     } catch (err) {
@@ -127,7 +147,7 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     jobError.value = null;
     try {
       await conversionApi.createConversionJobs(songId, { stemIds, requestedBy: "admin-ui-reconvert" });
-      await loadJobs(songId);
+      await Promise.all([loadJobs(songId), loadKeyAssets(songId)]);
       startPolling(songId);
       return true;
     } catch (err) {
@@ -135,6 +155,22 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
       return false;
     } finally {
       startingConversion.value = false;
+    }
+  }
+
+  async function transpose(songId: number, targetKeys: number[]): Promise<boolean> {
+    transposing.value = true;
+    transposeError.value = null;
+    try {
+      await transpositionApi.transposeSong(songId, { targetKeys });
+      await Promise.all([loadJobs(songId), loadKeyAssets(songId)]);
+      startPolling(songId);
+      return true;
+    } catch (err) {
+      transposeError.value = getErrorMessage(err);
+      return false;
+    } finally {
+      transposing.value = false;
     }
   }
 
@@ -160,12 +196,16 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
 
   async function refreshDuringPolling(songId: number): Promise<void> {
     try {
+      const hadActiveJobs = hasActiveJobs.value;
       const [nextStems, nextJobs] = await Promise.all([
         stemsApi.listStems(songId),
         conversionApi.listConversionJobs(songId),
       ]);
       stems.value = nextStems;
       jobs.value = nextJobs;
+      if (hadActiveJobs || nextJobs.some((job) => ACTIVE_JOB_STATUSES.has(job.status))) {
+        keyAssets.value = await transpositionApi.listKeyAssets(songId);
+      }
       jobError.value = null;
       if (!hasActiveJobs.value) {
         stopPolling();
@@ -178,37 +218,47 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
   function clearError(): void {
     error.value = null;
     jobError.value = null;
+    transposeError.value = null;
   }
 
   function reset(): void {
     stopPolling();
     stems.value = [];
     jobs.value = [];
+    keyAssets.value = [];
     error.value = null;
     jobError.value = null;
+    transposeError.value = null;
   }
 
   return {
     stems,
     jobs,
+    keyAssets,
     loading,
     loadingJobs,
+    loadingKeyAssets,
     uploading,
     importing,
     deletingId,
     startingConversion,
+    transposing,
     error,
     jobError,
+    transposeError,
     activeJobs,
     hasActiveJobs,
+    hasActiveTranspositionJobs,
     convertibleStems,
     load,
     loadJobs,
+    loadKeyAssets,
     upload,
     importFromSource,
     removeStem,
     startConversion,
     reconvert,
+    transpose,
     startPolling,
     stopPolling,
     clearError,

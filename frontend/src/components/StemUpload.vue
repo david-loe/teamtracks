@@ -3,17 +3,19 @@ import { ref } from "vue";
 
 import type { StemRole } from "@/api/stems";
 import { STEM_ROLES } from "@/api/stems";
+import { SONG_KEYS } from "@/types/keys";
 
 defineProps<{
   disabled?: boolean;
 }>();
 
 const emit = defineEmits<{
-  submit: [payload: { name: string; role: StemRole; file: File }];
+  submit: [payload: { name: string; role: StemRole; key: number | null; file: File }];
 }>();
 
 const name = ref("");
 const role = ref<StemRole>("other");
+const key = ref<number | null>(null);
 const file = ref<File | null>(null);
 
 function onFileChange(event: Event): void {
@@ -32,11 +34,13 @@ function submit(): void {
   emit("submit", {
     name: name.value.trim(),
     role: role.value,
+    key: key.value,
     file: file.value,
   });
 
   name.value = "";
   role.value = "other";
+  key.value = null;
   file.value = null;
 }
 </script>
@@ -51,6 +55,13 @@ function submit(): void {
       Rolle
       <select id="stem-upload-role" v-model="role" name="role" :disabled="disabled">
         <option v-for="stemRole in STEM_ROLES" :key="stemRole" :value="stemRole">{{ stemRole }}</option>
+      </select>
+    </label>
+    <label>
+      Tonart
+      <select id="stem-upload-key" v-model="key" name="key" :disabled="disabled">
+        <option :value="null">tonartunabhaengig</option>
+        <option v-for="songKey in SONG_KEYS" :key="songKey.value" :value="songKey.value">{{ songKey.label }}</option>
       </select>
     </label>
     <label>

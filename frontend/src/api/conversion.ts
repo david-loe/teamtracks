@@ -1,6 +1,7 @@
 import { apiJson, apiRequest } from "./client";
 
 export type ConversionJobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+export type ConversionJobType = "stem_conversion" | "song_transposition";
 
 export interface ConversionJobCreateInput {
   stemIds?: number[] | null;
@@ -16,6 +17,10 @@ export interface ConversionJob {
   id: number;
   songId: number;
   stemId: number | null;
+  songKeyId: number | null;
+  jobType: ConversionJobType;
+  targetKey: number | null;
+  semitoneOffset: number | null;
   status: ConversionJobStatus;
   requestedBy: string | null;
   monoBitrateKbps: number;

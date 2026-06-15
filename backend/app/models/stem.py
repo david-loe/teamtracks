@@ -11,6 +11,7 @@ from app.models.song import utc_now
 if TYPE_CHECKING:
     from app.models.conversion_job import ConversionJob
     from app.models.song import Song
+    from app.models.stem_key_asset import StemKeyAsset
 
 
 class Stem(Base):
@@ -20,6 +21,7 @@ class Stem(Base):
     song_id: Mapped[int] = mapped_column(ForeignKey("songs.id", ondelete="CASCADE"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     role: Mapped[str] = mapped_column(String, nullable=False)
+    key: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String, nullable=False, default=StemStatus.UPLOADED.value, index=True)
     source_path: Mapped[str | None] = mapped_column(Text)
     converted_path: Mapped[str | None] = mapped_column(Text)
@@ -36,4 +38,5 @@ class Stem(Base):
     updated_at: Mapped[datetime] = mapped_column(nullable=False, default=utc_now, onupdate=utc_now)
 
     song: Mapped["Song"] = relationship(back_populates="stems")
+    key_assets: Mapped[list["StemKeyAsset"]] = relationship(back_populates="stem", cascade="all, delete-orphan")
     conversion_jobs: Mapped[list["ConversionJob"]] = relationship(back_populates="stem", cascade="all, delete-orphan")

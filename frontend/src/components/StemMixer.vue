@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PlayableStemManifestItem } from "@/types/manifest";
+import { formatSongKey } from "@/types/keys";
 
 defineProps<{
   stems: PlayableStemManifestItem[];
@@ -22,7 +23,7 @@ defineEmits<{
     <div v-for="stem in stems" :key="stem.id" class="mixer-row">
       <div>
         <strong>{{ stem.name }}</strong>
-        <span class="table-subtext">{{ stem.role }} · {{ stem.channels ?? "n/a" }} ch</span>
+        <span class="table-subtext">{{ stem.role }} · {{ formatSongKey(stem.key) }} · {{ stem.channels ?? "n/a" }} ch</span>
       </div>
       <label class="inline-control">
         <input

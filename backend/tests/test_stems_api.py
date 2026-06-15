@@ -14,13 +14,14 @@ def test_wav_upload_and_delete_cleanup(client: TestClient) -> None:
 
     upload_response = client.post(
         f"/api/songs/{song['id']}/stems/upload",
-        data={"name": "Drums", "role": "drums"},
+        data={"name": "Drums", "role": "drums", "key": "0"},
         files={"file": ("drums.wav", b"RIFF----WAVEfmt data", "audio/wav")},
     )
     assert upload_response.status_code == 201
     stem = upload_response.json()
     assert stem["songId"] == song["id"]
     assert stem["status"] == "uploaded"
+    assert stem["key"] == 0
     assert stem["sourceFilename"] == "drums.wav"
     assert stem["fileSizeBytes"] == 20
 
@@ -54,10 +55,11 @@ def test_secure_import_and_song_cleanup(client: TestClient, tmp_path: Path) -> N
 
     import_response = client.post(
         f"/api/songs/{song['id']}/stems/import",
-        json={"sourcePath": str(import_file), "name": "Vocals", "role": "vocals"},
+        json={"sourcePath": str(import_file), "name": "Vocals", "role": "vocals", "key": None},
     )
     assert import_response.status_code == 201
     stem = import_response.json()
+    assert stem["key"] is None
     assert stem["sourceFilename"] == "vocals.wav"
     assert stem["fileSizeBytes"] == 16
 

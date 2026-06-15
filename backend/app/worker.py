@@ -27,7 +27,14 @@ def process_next_job(conversion_service: ConversionService) -> bool:
         if job is None:
             return False
 
-        logger.info("processing conversion job %s for song %s stem %s", job.id, job.song_id, job.stem_id)
+        logger.info(
+            "processing %s job %s for song %s stem %s target key %s",
+            job.job_type,
+            job.id,
+            job.song_id,
+            job.stem_id,
+            job.target_key,
+        )
         conversion_service.process_job(db, job.id)
         return True
 

@@ -5,6 +5,7 @@ import * as conversionApi from "@/api/conversion";
 import type { ConversionJob } from "@/api/conversion";
 import type { Stem } from "@/api/stems";
 import * as stemsApi from "@/api/stems";
+import * as transpositionApi from "@/api/transposition";
 import { useAdminStemsStore } from "@/stores/adminStems";
 
 vi.mock("@/api/stems", () => ({
@@ -20,11 +21,17 @@ vi.mock("@/api/conversion", () => ({
   listConversionJobs: vi.fn(),
 }));
 
+vi.mock("@/api/transposition", () => ({
+  transposeSong: vi.fn(),
+  listKeyAssets: vi.fn(),
+}));
+
 const uploadedStem: Stem = {
   id: 1,
   songId: 10,
   name: "Drums",
   role: "drums",
+  key: null,
   status: "uploaded",
   sourceFilename: "drums.wav",
   sourceFormat: "wav",
@@ -44,6 +51,7 @@ const readyStem: Stem = {
   id: 2,
   name: "Bass",
   role: "bass",
+  key: 0,
   status: "ready",
   codec: "aac",
   sampleRate: 48000,
@@ -56,6 +64,10 @@ const runningJob: ConversionJob = {
   id: 99,
   songId: 10,
   stemId: 1,
+  songKeyId: null,
+  jobType: "stem_conversion",
+  targetKey: null,
+  semitoneOffset: null,
   status: "running",
   requestedBy: "admin-ui",
   monoBitrateKbps: 96,
@@ -74,6 +86,7 @@ describe("useAdminStemsStore", () => {
     setActivePinia(createPinia());
     vi.useRealTimers();
     vi.resetAllMocks();
+    vi.mocked(transpositionApi.listKeyAssets).mockResolvedValue([]);
   });
 
   it("loads stems and exposes only uploaded/error stems as convertible", async () => {
@@ -94,7 +107,7 @@ describe("useAdminStemsStore", () => {
     const file = new File(["wav"], "drums.wav", { type: "audio/wav" });
     const store = useAdminStemsStore();
     await store.load(10);
-    const ok = await store.upload(10, { name: "Drums", role: "drums", file });
+    const ok = await store.upload(10, { name: "Drums", role: "drums", key: null, file });
 
     expect(ok).toBe(true);
     expect(store.stems).toEqual([readyStem, uploadedStem]);
@@ -144,5 +157,29 @@ describe("useAdminStemsStore", () => {
       stemIds: [1, 2],
       requestedBy: "admin-ui-reconvert",
     });
+  });
+
+  it("transposes ready songs into selected keys", async () => {
+    vi.mocked(transpositionApi.transposeSong).mockResolvedValue({ jobIds: [100], status: "queued" });
+    vi.mocked(conversionApi.listConversionJobs).mockResolvedValue([
+      {
+        ...runningJob,
+        id: 100,
+        stemId: null,
+        jobType: "song_transposition",
+        targetKey: 2,
+        semitoneOffset: 2,
+      },
+    ]);
+
+    const store = useAdminStemsStore();
+    const ok = await store.transpose(10, [2]);
+
+    expect(ok).toBe(true);
+    expect(transpositionApi.transposeSong).toHaveBeenCalledWith(10, { targetKeys: [2] });
+    expect(conversionApi.listConversionJobs).toHaveBeenCalledWith(10);
+    expect(transpositionApi.listKeyAssets).toHaveBeenCalledWith(10);
+    expect(store.transposeError).toBeNull();
+    store.reset();
   });
 });

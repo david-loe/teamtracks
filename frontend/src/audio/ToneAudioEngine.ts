@@ -10,6 +10,7 @@ interface StemNode {
   gain: Tone.Gain<"decibels">;
   baseGainDb: number;
   muted: boolean;
+  focusable: boolean;
 }
 
 type PlaybackState = "stopped" | "paused" | "playing";
@@ -51,6 +52,7 @@ export class ToneAudioEngine implements AudioEngine {
           gain,
           baseGainDb: 0,
           muted: false,
+          focusable: stem.focusable,
         });
         this.applyStemGain(stem.id);
       }),
@@ -169,6 +171,10 @@ export class ToneAudioEngine implements AudioEngine {
 
   private getFocusGain(stemId: number): number {
     if (this.focus.stemId === null) {
+      return 0;
+    }
+    const node = this.stems.get(stemId);
+    if (!node?.focusable) {
       return 0;
     }
     return stemId === this.focus.stemId ? this.focus.focusedGainDb : this.focus.backgroundGainDb;

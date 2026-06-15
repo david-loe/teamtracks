@@ -5,10 +5,12 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.domain import ConversionJobStatus, SongStatus, StemStatus
+from app.domain import ConversionJobStatus, ConversionJobType, SongStatus, StemStatus
 from app.models.conversion_job import ConversionJob
 from app.models.song import Song, utc_now
+from app.models.song_key import SongKey
 from app.models.stem import Stem
+from app.models.stem_key_asset import StemKeyAsset
 from app.services.probing import AudioMetadata, FFprobeService, ProbeError
 from app.services.storage import StorageService
 
@@ -40,7 +42,11 @@ class ConversionService:
         job = db.scalar(
             select(ConversionJob)
             .where(ConversionJob.id == job_id)
-            .options(selectinload(ConversionJob.song), selectinload(ConversionJob.stem))
+            .options(
+                selectinload(ConversionJob.song),
+                selectinload(ConversionJob.stem),
+                selectinload(ConversionJob.song_key).selectinload(SongKey.stem_assets),
+            )
         )
         if job is None:
             raise ConversionError("Conversion job not found")
@@ -54,17 +60,29 @@ class ConversionService:
         db.refresh(job)
 
         try:
-            if job.stem is None:
-                raise ConversionError("Conversion job has no stem")
-            self.convert_stem(
-                db,
-                job.song,
-                job.stem,
-                target_sample_rate=job.target_sample_rate,
-                duration_tolerance_ms=job.duration_tolerance_ms,
-                mono_bitrate_kbps=job.mono_bitrate_kbps,
-                stereo_bitrate_kbps=job.stereo_bitrate_kbps,
-            )
+            if job.job_type == ConversionJobType.STEM_CONVERSION.value:
+                if job.stem is None:
+                    raise ConversionError("Conversion job has no stem")
+                self.convert_stem(
+                    db,
+                    job.song,
+                    job.stem,
+                    target_sample_rate=job.target_sample_rate,
+                    duration_tolerance_ms=job.duration_tolerance_ms,
+                    mono_bitrate_kbps=job.mono_bitrate_kbps,
+                    stereo_bitrate_kbps=job.stereo_bitrate_kbps,
+                )
+            elif job.job_type == ConversionJobType.SONG_TRANSPOSITION.value:
+                self.transpose_song_key(
+                    db,
+                    job,
+                    target_sample_rate=job.target_sample_rate,
+                    duration_tolerance_ms=job.duration_tolerance_ms,
+                    mono_bitrate_kbps=job.mono_bitrate_kbps,
+                    stereo_bitrate_kbps=job.stereo_bitrate_kbps,
+                )
+            else:
+                raise ConversionError(f"Unsupported conversion job type: {job.job_type}")
         except Exception as exc:
             message = truncate_process_error(str(exc))
             job.status = ConversionJobStatus.FAILED.value
@@ -73,6 +91,12 @@ class ConversionService:
             if job.stem is not None:
                 job.stem.status = StemStatus.ERROR.value
                 job.stem.error_message = message
+            if job.song_key_id is not None:
+                song_key = db.get(SongKey, job.song_key_id)
+                if song_key is not None:
+                    song_key.status = SongStatus.ERROR.value
+                    song_key.error_message = message
+                    mark_key_assets_error(db, song_key, message)
             db.flush()
             recalculate_song_status(db, job.song_id)
             db.commit()
@@ -110,23 +134,17 @@ class ConversionService:
 
         metadata = self.probe_service.probe_wav(source_path)
         targets = self.ensure_song_targets(db, song, target_sample_rate)
-        duration_delta = abs(metadata.duration_ms - targets.duration_ms)
-        if duration_delta > duration_tolerance_ms:
-            stem.duration_ms = metadata.duration_ms
-            stem.sample_rate = metadata.sample_rate
-            stem.channels = metadata.channels
-            raise ConversionError(
-                f"Stem duration differs from song target by {duration_delta} ms; maximum allowed is "
-                f"{duration_tolerance_ms} ms"
-            )
+        self.validate_duration(metadata, targets, duration_tolerance_ms, stem)
 
-        output_path = self.storage.converted_path(song.id, stem.id)
+        song_key = ensure_song_key(db, song, 0, is_original=True)
+        output_path = self.storage.key_asset_path(song.id, song_key.id, stem.id)
         bitrate_kbps = bitrate_kbps_for_channels(
             metadata.channels,
             mono_bitrate_kbps=mono_bitrate_kbps,
             stereo_bitrate_kbps=stereo_bitrate_kbps,
         )
-        self.run_ffmpeg(source_path, output_path, targets, metadata.channels, bitrate_kbps)
+        pitch_semitones = semitone_delta(stem.key, song.original_key)
+        self.run_ffmpeg(source_path, output_path, targets, metadata.channels, bitrate_kbps, pitch_semitones=pitch_semitones)
 
         stem.converted_path = str(output_path)
         stem.source_format = "wav"
@@ -138,7 +156,146 @@ class ConversionService:
         stem.bitrate_kbps = bitrate_kbps
         stem.error_message = None
         stem.status = StemStatus.READY.value
+        upsert_stem_key_asset(
+            db,
+            song_key=song_key,
+            stem=stem,
+            file_path=output_path,
+            codec=stem.codec,
+            sample_rate=stem.sample_rate,
+            channels=stem.channels,
+            duration_ms=stem.duration_ms,
+            file_size_bytes=stem.file_size_bytes,
+            bitrate_kbps=stem.bitrate_kbps,
+        )
+        sync_song_key_status(db, song, song_key)
         db.flush()
+
+    def transpose_song_key(
+        self,
+        db: Session,
+        job: ConversionJob,
+        *,
+        target_sample_rate: int = 48000,
+        duration_tolerance_ms: int = 100,
+        mono_bitrate_kbps: int = 96,
+        stereo_bitrate_kbps: int = 160,
+    ) -> SongKey:
+        song = job.song
+        target_key = validate_target_key(job.target_key)
+        semitone_offset = semitone_offset_for_target(song.original_key, target_key)
+        song_key = ensure_song_key(db, song, semitone_offset, is_original=semitone_offset == 0)
+        song_key.status = SongStatus.DRAFT.value
+        song_key.error_message = None
+        job.song_key_id = song_key.id
+        job.semitone_offset = semitone_offset
+        db.flush()
+
+        if song.status != SongStatus.READY.value:
+            raise ConversionError("Song must be ready before transposition")
+
+        stems = list(
+            db.scalars(
+                select(Stem)
+                .where(Stem.song_id == song.id)
+                .order_by(Stem.created_at.asc(), Stem.id.asc())
+            )
+        )
+        if not stems:
+            raise ConversionError("Song has no stems to transpose")
+        if any(stem.status != StemStatus.READY.value or stem.source_path is None for stem in stems):
+            raise ConversionError("All stems must be ready and have source files before transposition")
+
+        targets = self.ensure_song_targets(db, song, target_sample_rate)
+        original_song_key = ensure_song_key(db, song, 0, is_original=True)
+        for stem in stems:
+            if stem.key is None and target_key != song.original_key:
+                original_asset = get_stem_key_asset(db, original_song_key.id, stem.id)
+                if original_asset is None or original_asset.status != StemStatus.READY.value or original_asset.file_path is None:
+                    raise ConversionError(f"Original asset missing for key-independent stem {stem.id}")
+                copy_asset_metadata(db, song_key=song_key, stem=stem, source_asset=original_asset)
+            else:
+                self.convert_stem_for_key(
+                    db,
+                    song=song,
+                    song_key=song_key,
+                    stem=stem,
+                    targets=targets,
+                    target_key=target_key,
+                    duration_tolerance_ms=duration_tolerance_ms,
+                    mono_bitrate_kbps=mono_bitrate_kbps,
+                    stereo_bitrate_kbps=stereo_bitrate_kbps,
+                )
+        song_key.status = SongStatus.READY.value
+        song_key.error_message = None
+        db.flush()
+        return song_key
+
+    def convert_stem_for_key(
+        self,
+        db: Session,
+        *,
+        song: Song,
+        song_key: SongKey,
+        stem: Stem,
+        targets: ConversionTargets,
+        target_key: int,
+        duration_tolerance_ms: int,
+        mono_bitrate_kbps: int,
+        stereo_bitrate_kbps: int,
+    ) -> StemKeyAsset:
+        if stem.source_path is None:
+            raise ConversionError("Stem has no source file")
+
+        source_path = Path(stem.source_path)
+        if not source_path.is_file():
+            raise ConversionError("Stem source file not found")
+
+        metadata = self.probe_service.probe_wav(source_path)
+        self.validate_duration(metadata, targets, duration_tolerance_ms, stem)
+        bitrate_kbps = bitrate_kbps_for_channels(
+            metadata.channels,
+            mono_bitrate_kbps=mono_bitrate_kbps,
+            stereo_bitrate_kbps=stereo_bitrate_kbps,
+        )
+        output_path = self.storage.key_asset_path(song.id, song_key.id, stem.id)
+        self.run_ffmpeg(
+            source_path,
+            output_path,
+            targets,
+            metadata.channels,
+            bitrate_kbps,
+            pitch_semitones=semitone_delta(stem.key, target_key),
+        )
+        return upsert_stem_key_asset(
+            db,
+            song_key=song_key,
+            stem=stem,
+            file_path=output_path,
+            codec="aac-lc",
+            sample_rate=targets.sample_rate,
+            channels=metadata.channels,
+            duration_ms=targets.duration_ms,
+            file_size_bytes=output_path.stat().st_size,
+            bitrate_kbps=bitrate_kbps,
+        )
+
+    def validate_duration(
+        self,
+        metadata: AudioMetadata,
+        targets: ConversionTargets,
+        duration_tolerance_ms: int,
+        stem: Stem,
+    ) -> None:
+        duration_delta = abs(metadata.duration_ms - targets.duration_ms)
+        if duration_delta > duration_tolerance_ms:
+            stem.duration_ms = metadata.duration_ms
+            stem.sample_rate = metadata.sample_rate
+            stem.channels = metadata.channels
+            raise ConversionError(
+                f"Stem duration differs from song target by {duration_delta} ms; maximum allowed is "
+                f"{duration_tolerance_ms} ms"
+            )
 
     def ensure_song_targets(self, db: Session, song: Song, target_sample_rate: int) -> ConversionTargets:
         valid_metadata = self._probe_song_sources(db, song.id)
@@ -159,6 +316,8 @@ class ConversionService:
         targets: ConversionTargets,
         channels: int,
         bitrate_kbps: int,
+        *,
+        pitch_semitones: int = 0,
     ) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         temporary_path = output_path.with_name(f".{output_path.stem}.tmp{output_path.suffix}")
@@ -172,6 +331,7 @@ class ConversionService:
             target_duration_ms=targets.duration_ms,
             channels=channels,
             bitrate_kbps=bitrate_kbps,
+            pitch_semitones=pitch_semitones,
         )
         result = subprocess.run(command, check=False, capture_output=True, text=True)
         if result.returncode != 0:
@@ -208,9 +368,15 @@ def build_ffmpeg_command(
     target_duration_ms: int,
     channels: int,
     bitrate_kbps: int | None = None,
+    pitch_semitones: int = 0,
 ) -> list[str]:
     duration_seconds = f"{target_duration_ms / 1000:.3f}"
     bitrate = f"{bitrate_kbps if bitrate_kbps is not None else bitrate_kbps_for_channels(channels)}k"
+    audio_filters = []
+    if pitch_semitones != 0:
+        pitch_ratio = 2 ** (pitch_semitones / 12)
+        audio_filters.append(f"rubberband=pitch={pitch_ratio:.8f}")
+    audio_filters.append(f"aresample=async=1:first_pts=0,apad,atrim=0:{duration_seconds}")
     return [
         ffmpeg_binary,
         "-y",
@@ -230,11 +396,148 @@ def build_ffmpeg_command(
         "-b:a",
         bitrate,
         "-af",
-        f"aresample=async=1:first_pts=0,apad,atrim=0:{duration_seconds}",
+        ",".join(audio_filters),
         "-movflags",
         "+faststart",
         str(output_path),
     ]
+
+
+def semitone_delta(source_key: int | None, target_key: int) -> int:
+    if source_key is None:
+        return 0
+    delta = (target_key - source_key) % 12
+    if delta > 6:
+        delta -= 12
+    return delta
+
+
+def unique_keys(keys: list[int]) -> list[int]:
+    result: list[int] = []
+    for key in keys:
+        validate_target_key(key)
+        if key not in result:
+            result.append(key)
+    if not result:
+        raise ConversionError("At least one target key is required")
+    return result
+
+
+def validate_target_key(target_key: int | None) -> int:
+    if target_key is None or target_key < 0 or target_key > 11:
+        raise ConversionError("Target keys must be between 0 and 11")
+    return target_key
+
+
+def semitone_offset_for_target(original_key: int, target_key: int) -> int:
+    return (target_key - original_key) % 12
+
+
+def ensure_song_key(db: Session, song: Song, semitone_offset: int, *, is_original: bool) -> SongKey:
+    song_key = db.scalar(
+        select(SongKey).where(SongKey.song_id == song.id, SongKey.semitone_offset == semitone_offset)
+    )
+    if song_key is None:
+        song_key = SongKey(
+            song_id=song.id,
+            semitone_offset=semitone_offset,
+            is_original=is_original,
+            status=SongStatus.DRAFT.value,
+        )
+        db.add(song_key)
+        db.flush()
+    if is_original:
+        key_variants = db.scalars(select(SongKey).where(SongKey.song_id == song.id)).all()
+        for key_variant in key_variants:
+            key_variant.is_original = key_variant.id == song_key.id
+        db.flush()
+    return song_key
+
+
+def get_stem_key_asset(db: Session, song_key_id: int, stem_id: int) -> StemKeyAsset | None:
+    return db.scalar(
+        select(StemKeyAsset).where(StemKeyAsset.song_key_id == song_key_id, StemKeyAsset.stem_id == stem_id)
+    )
+
+
+def upsert_stem_key_asset(
+    db: Session,
+    *,
+    song_key: SongKey,
+    stem: Stem,
+    file_path: Path,
+    codec: str | None,
+    sample_rate: int | None,
+    channels: int | None,
+    duration_ms: int | None,
+    file_size_bytes: int | None,
+    bitrate_kbps: int | None,
+) -> StemKeyAsset:
+    asset = get_stem_key_asset(db, song_key.id, stem.id)
+    if asset is None:
+        asset = StemKeyAsset(song_key_id=song_key.id, stem_id=stem.id)
+        db.add(asset)
+    asset.status = StemStatus.READY.value
+    asset.file_path = str(file_path)
+    asset.codec = codec
+    asset.sample_rate = sample_rate
+    asset.channels = channels
+    asset.duration_ms = duration_ms
+    asset.file_size_bytes = file_size_bytes
+    asset.bitrate_kbps = bitrate_kbps
+    asset.error_message = None
+    db.flush()
+    return asset
+
+
+def copy_asset_metadata(
+    db: Session,
+    *,
+    song_key: SongKey,
+    stem: Stem,
+    source_asset: StemKeyAsset,
+) -> StemKeyAsset:
+    if source_asset.file_path is None:
+        raise ConversionError("Source asset has no file path")
+    return upsert_stem_key_asset(
+        db,
+        song_key=song_key,
+        stem=stem,
+        file_path=Path(source_asset.file_path),
+        codec=source_asset.codec,
+        sample_rate=source_asset.sample_rate,
+        channels=source_asset.channels,
+        duration_ms=source_asset.duration_ms,
+        file_size_bytes=source_asset.file_size_bytes,
+        bitrate_kbps=source_asset.bitrate_kbps,
+    )
+
+
+def mark_key_assets_error(db: Session, song_key: SongKey, message: str) -> None:
+    for asset in song_key.stem_assets:
+        asset.status = StemStatus.ERROR.value
+        asset.error_message = message
+    db.flush()
+
+
+def sync_song_key_status(db: Session, song: Song, song_key: SongKey) -> None:
+    stems = list(db.scalars(select(Stem).where(Stem.song_id == song.id)))
+    if not stems:
+        song_key.status = SongStatus.DRAFT.value
+        return
+    assets_by_stem_id = {asset.stem_id: asset for asset in song_key.stem_assets}
+    if all(
+        stem.status == StemStatus.READY.value
+        and (asset := assets_by_stem_id.get(stem.id)) is not None
+        and asset.status == StemStatus.READY.value
+        and asset.file_path is not None
+        for stem in stems
+    ):
+        song_key.status = SongStatus.READY.value
+        song_key.error_message = None
+    else:
+        song_key.status = SongStatus.DRAFT.value
+    db.flush()
 
 
 def bitrate_kbps_for_channels(

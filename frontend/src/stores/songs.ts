@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
-import type { Song, SongCreateInput, SongListItem } from "@/api/songs";
+import type { Song, SongCreateInput, SongListItem, SongUpdateInput } from "@/api/songs";
 import * as songsApi from "@/api/songs";
 
 export const useSongsStore = defineStore("songs", () => {
@@ -55,6 +55,22 @@ export const useSongsStore = defineStore("songs", () => {
     }
   }
 
+  async function updateSong(songId: number, input: SongUpdateInput): Promise<Song | null> {
+    saving.value = true;
+    error.value = null;
+    try {
+      const song = await songsApi.updateSong(songId, input);
+      currentSong.value = song;
+      await fetchSongs();
+      return song;
+    } catch (err) {
+      error.value = getErrorMessage(err);
+      return null;
+    } finally {
+      saving.value = false;
+    }
+  }
+
   async function deleteSong(songId: number): Promise<boolean> {
     deletingId.value = songId;
     error.value = null;
@@ -89,6 +105,7 @@ export const useSongsStore = defineStore("songs", () => {
     fetchSongs,
     fetchSong,
     createSong,
+    updateSong,
     deleteSong,
     clearError,
   };

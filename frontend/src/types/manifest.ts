@@ -4,13 +4,25 @@ export interface SongManifest {
   song: {
     id: number;
     title: string;
+    artist: string;
     slug: string;
+    originalKey: number;
     durationMs: number | null;
     sampleRate: number | null;
   };
+  keyVariants: SongKeyVariant[];
+  selectedKeyId: number | null;
   playable: boolean;
   stems: StemManifestItem[];
   playerSettings?: PlayerSettings;
+}
+
+export interface SongKeyVariant {
+  id: number;
+  semitoneOffset: number;
+  isOriginal: boolean;
+  status: "draft" | "ready" | "error";
+  errorMessage: string | null;
 }
 
 export interface PlayerSettings {
@@ -30,6 +42,8 @@ export interface StemManifestItem {
   id: number;
   name: string;
   role: StemRole;
+  key: number | null;
+  focusable: boolean;
   status: StemStatus;
   url: string | null;
   codec: string | null;

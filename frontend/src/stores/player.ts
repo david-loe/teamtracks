@@ -41,6 +41,9 @@ export const usePlayerStore = defineStore("player", () => {
   let playAttemptId = 0;
 
   const playableStems = computed(() => manifest.value?.stems.filter(isPlayableStem) ?? []);
+  const focusableStems = computed(() => playableStems.value.filter((stem) => stem.focusable));
+  const keyVariants = computed(() => manifest.value?.keyVariants ?? []);
+  const selectedKeyId = computed(() => manifest.value?.selectedKeyId ?? null);
   const durationSeconds = computed(() => Math.max(0, (manifest.value?.song.durationMs ?? 0) / 1000));
   const durationMs = computed(() => manifest.value?.song.durationMs ?? null);
   const controlsEnabled = computed(() => audioLoaded.value && !loadingAudio.value);
@@ -54,7 +57,7 @@ export const usePlayerStore = defineStore("player", () => {
     return Math.round((totalRatio / playableStems.value.length) * 100);
   });
 
-  async function load(songId: number): Promise<void> {
+  async function load(songId: number, keyId: number | null = null): Promise<void> {
     const requestId = ++pageLoadId;
     resetAudio();
     manifest.value = null;
@@ -63,7 +66,7 @@ export const usePlayerStore = defineStore("player", () => {
     loadError.value = null;
     playbackError.value = null;
     try {
-      const nextManifest = await manifestApi.getSongManifest(songId);
+      const nextManifest = await manifestApi.getSongManifest(songId, keyId);
       if (requestId !== pageLoadId) {
         return;
       }
@@ -189,8 +192,16 @@ export const usePlayerStore = defineStore("player", () => {
   }
 
   function setFocusStem(stemId: number | null): void {
-    focusedStemId.value = stemId;
+    const nextStemId = stemId !== null && focusableStems.value.some((stem) => stem.id === stemId) ? stemId : null;
+    focusedStemId.value = nextStemId;
     applyFocus();
+  }
+
+  async function selectKey(songId: number, keyId: number): Promise<void> {
+    if (keyId === selectedKeyId.value) {
+      return;
+    }
+    await load(songId, keyId);
   }
 
   function setFocusGains(nextFocusedGainDb: number, nextBackgroundGainDb: number): void {
@@ -322,6 +333,9 @@ export const usePlayerStore = defineStore("player", () => {
     backgroundGainDb,
     playerSettings,
     playableStems,
+    focusableStems,
+    keyVariants,
+    selectedKeyId,
     controlsEnabled,
     load,
     retryAudioLoad: loadAudio,
@@ -333,6 +347,7 @@ export const usePlayerStore = defineStore("player", () => {
     setStemGain,
     setFocusStem,
     setFocusGains,
+    selectKey,
     reset,
   };
 });

@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.domain import ConversionJobStatus
+from app.domain import ConversionJobStatus, ConversionJobType
 
 
 class ConversionJobCreate(BaseModel):
@@ -23,6 +23,10 @@ class ConversionJobRead(BaseModel):
     id: int
     song_id: int = Field(alias="songId")
     stem_id: int | None = Field(default=None, alias="stemId")
+    song_key_id: int | None = Field(default=None, alias="songKeyId")
+    job_type: ConversionJobType = Field(alias="jobType")
+    target_key: int | None = Field(default=None, alias="targetKey")
+    semitone_offset: int | None = Field(default=None, alias="semitoneOffset")
     status: ConversionJobStatus
     requested_by: str | None = Field(default=None, alias="requestedBy")
     mono_bitrate_kbps: int = Field(alias="monoBitrateKbps")

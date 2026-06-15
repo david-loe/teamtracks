@@ -25,6 +25,9 @@ class StorageService:
     def converted_path(self, song_id: int, stem_id: int) -> Path:
         return self.song_dir(song_id) / "converted" / f"{stem_id}.m4a"
 
+    def key_asset_path(self, song_id: int, song_key_id: int, stem_id: int) -> Path:
+        return self.song_dir(song_id) / "keys" / str(song_key_id) / f"{stem_id}.m4a"
+
     def save_upload(self, song_id: int, stem_id: int, upload: UploadFile) -> Path:
         self.validate_wav_upload(upload)
         destination = self.source_path(song_id, stem_id)
@@ -46,7 +49,8 @@ class StorageService:
         return destination
 
     def cleanup_stem(self, stem: Stem) -> None:
-        for raw_path in (stem.source_path, stem.converted_path):
+        asset_paths = [asset.file_path for asset in stem.key_assets]
+        for raw_path in (stem.source_path, stem.converted_path, *asset_paths):
             if raw_path:
                 self._unlink_if_inside_storage(Path(raw_path))
 
@@ -81,6 +85,13 @@ class StorageService:
         except ValueError:
             return
         resolved.unlink(missing_ok=True)
+
+    def is_inside_storage(self, path: Path) -> bool:
+        try:
+            path.resolve().relative_to(self.storage_root.resolve())
+        except ValueError:
+            return False
+        return True
 
 
 def get_storage_service(settings: Settings = Depends(get_settings)) -> StorageService:

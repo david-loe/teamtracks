@@ -10,6 +10,7 @@ from app.api.public import router as public_router
 from app.api.settings import router as settings_router
 from app.api.songs import router as songs_router
 from app.api.stems import router as stems_router
+from app.api.transposition import router as transposition_router
 from app.config import get_settings
 
 
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
     app.include_router(songs_router)
     app.include_router(stems_router)
     app.include_router(conversion_jobs_router)
+    app.include_router(transposition_router)
     app.include_router(manifest_router)
     app.include_router(media_router)
     return app

@@ -7,6 +7,7 @@ import LoadingProgress from "@/components/LoadingProgress.vue";
 import StemMixer from "@/components/StemMixer.vue";
 import { usePlayerStore } from "@/stores/player";
 import { formatDuration } from "@/types/format";
+import { formatSongKey } from "@/types/keys";
 
 const props = defineProps<{
   id: string;
@@ -39,6 +40,15 @@ async function loadPage(): Promise<void> {
 function seek(event: Event): void {
   playerStore.seek(Number((event.target as HTMLInputElement).value));
 }
+
+function selectKey(event: Event): void {
+  playerStore.selectKey(songId.value, Number((event.target as HTMLSelectElement).value));
+}
+
+function keyVariantLabel(semitoneOffset: number): string {
+  const originalKey = playerStore.manifest?.song.originalKey ?? 0;
+  return formatSongKey((originalKey + semitoneOffset) % 12);
+}
 </script>
 
 <template>
@@ -47,7 +57,10 @@ function seek(event: Event): void {
       <div>
         <p class="eyebrow">Song {{ id }}</p>
         <h1>{{ playerStore.manifest?.song.title ?? "Player" }}</h1>
-        <p class="muted">{{ formatDuration(playerStore.durationMs) }} · {{ playerStore.playableStems.length }} Stem(s)</p>
+        <p class="muted">
+          {{ playerStore.manifest?.song.artist || "Unbekannter Künstler" }} ·
+          {{ formatDuration(playerStore.durationMs) }} · {{ playerStore.playableStems.length }} Stem(s)
+        </p>
       </div>
       <div class="header-actions">
         <RouterLink class="button button-secondary" to="/songs">Zur Liste</RouterLink>
@@ -83,6 +96,26 @@ function seek(event: Event): void {
         </div>
 
         <template v-else>
+          <label v-if="playerStore.keyVariants.length > 0" class="key-select">
+            Tonart
+            <select
+              id="player-key"
+              name="playerKey"
+              :value="playerStore.selectedKeyId ?? ''"
+              :disabled="playerStore.loadingAudio || playerStore.startingPlayback"
+              @change="selectKey"
+            >
+              <option
+                v-for="keyVariant in playerStore.keyVariants"
+                :key="keyVariant.id"
+                :value="keyVariant.id"
+                :disabled="keyVariant.status !== 'ready'"
+              >
+                {{ keyVariantLabel(keyVariant.semitoneOffset) }}{{ keyVariant.isOriginal ? " (Original)" : "" }}
+              </option>
+            </select>
+          </label>
+
           <LoadingProgress
             v-if="playerStore.loadingAudio || playerStore.loadProgressPercent > 0"
             :stems="playerStore.playableStems"
@@ -157,7 +190,7 @@ function seek(event: Event): void {
       <section class="panel">
         <h2>Fokus</h2>
         <FocusControls
-          :stems="playerStore.playableStems"
+          :stems="playerStore.focusableStems"
           :selected-stem-id="playerStore.focusedStemId"
           :focused-gain-db="playerStore.focusedGainDb"
           :background-gain-db="playerStore.backgroundGainDb"

@@ -264,7 +264,7 @@ textarea:focus {
 
 .data-table {
   width: 100%;
-  min-width: 720px;
+  min-width: 860px;
   border-collapse: collapse;
 }
 
@@ -310,6 +310,17 @@ textarea:focus {
   color: #374151;
   font-size: 0.78rem;
   font-weight: 750;
+}
+
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.key-badge {
+  min-width: 42px;
+  justify-content: center;
 }
 
 .status-ready,
