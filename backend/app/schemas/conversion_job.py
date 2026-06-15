@@ -1,0 +1,34 @@
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.domain import ConversionJobStatus
+
+
+class ConversionJobCreate(BaseModel):
+    stem_ids: list[int] | None = Field(default=None, alias="stemIds")
+    requested_by: str | None = Field(default=None, alias="requestedBy")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ConversionJobBatchRead(BaseModel):
+    job_ids: list[int] = Field(alias="jobIds")
+    status: ConversionJobStatus
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ConversionJobRead(BaseModel):
+    id: int
+    song_id: int = Field(alias="songId")
+    stem_id: int | None = Field(default=None, alias="stemId")
+    status: ConversionJobStatus
+    requested_by: str | None = Field(default=None, alias="requestedBy")
+    started_at: datetime | None = Field(default=None, alias="startedAt")
+    finished_at: datetime | None = Field(default=None, alias="finishedAt")
+    error_message: str | None = Field(default=None, alias="errorMessage")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)

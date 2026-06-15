@@ -1,0 +1,12 @@
+FROM node:24.14-alpine
+
+WORKDIR /npm_cache
+COPY frontend/package*.json ./
+RUN npm install
+RUN chown -R node:node /npm_cache
+
+WORKDIR /app
+
+ENTRYPOINT [ "/bin/sh", "-c", "rm -rf /app/node_modules/* /app/node_modules/.[!.]* /app/node_modules/..?* && cp -r /npm_cache/node_modules/. /app/node_modules && exec \"$0\" \"$@\"" ]
+
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

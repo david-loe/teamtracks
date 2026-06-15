@@ -1,0 +1,39 @@
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+from app.domain import StemStatus
+from app.models.song import utc_now
+
+if TYPE_CHECKING:
+    from app.models.conversion_job import ConversionJob
+    from app.models.song import Song
+
+
+class Stem(Base):
+    __tablename__ = "stems"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    song_id: Mapped[int] = mapped_column(ForeignKey("songs.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    role: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default=StemStatus.UPLOADED.value, index=True)
+    source_path: Mapped[str | None] = mapped_column(Text)
+    converted_path: Mapped[str | None] = mapped_column(Text)
+    source_filename: Mapped[str | None] = mapped_column(String)
+    source_format: Mapped[str] = mapped_column(String, nullable=False, default="wav")
+    codec: Mapped[str | None] = mapped_column(String)
+    sample_rate: Mapped[int | None] = mapped_column(Integer)
+    channels: Mapped[int | None] = mapped_column(Integer)
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+    file_size_bytes: Mapped[int | None] = mapped_column(Integer)
+    bitrate_kbps: Mapped[int | None] = mapped_column(Integer)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(nullable=False, default=utc_now, onupdate=utc_now)
+
+    song: Mapped["Song"] = relationship(back_populates="stems")
+    conversion_jobs: Mapped[list["ConversionJob"]] = relationship(back_populates="stem", cascade="all, delete-orphan")

@@ -1,0 +1,20 @@
+FROM node:24.14-alpine
+
+RUN apk add nginx
+
+COPY frontend/nginx.conf /etc/nginx/nginx.conf
+
+WORKDIR /app
+
+ENV HOME=/home/node
+
+COPY frontend/package*.json ./
+RUN npm install
+
+COPY frontend/ .
+
+RUN mkdir -p /home/node && chown -R node:node /home/node /app
+
+USER node
+
+CMD ["sh", "-c", "npm run build && nginx -e /dev/stderr -g 'daemon off;'"]

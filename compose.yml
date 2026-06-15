@@ -1,0 +1,90 @@
+services:
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: sqlite:////data/db/teamtracks.db
+      STORAGE_ROOT: /data/storage
+      SOURCE_ROOT: /data/imports
+    volumes:
+      - db_data:/data/db
+      - media_storage:/data/storage
+      - source_imports:/data/imports
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: sqlite:////data/db/teamtracks.db
+      STORAGE_ROOT: /data/storage
+      SOURCE_ROOT: /data/imports
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - db_data:/data/db
+      - media_storage:/data/storage
+      - source_imports:/data/imports
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "app.worker"]
+    environment:
+      DATABASE_URL: sqlite:////data/db/teamtracks.db
+      STORAGE_ROOT: /data/storage
+      SOURCE_ROOT: /data/imports
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      backend:
+        condition: service_started
+    volumes:
+      - db_data:/data/db
+      - media_storage:/data/storage
+      - source_imports:/data/imports
+
+  backend-test:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["pytest"]
+    environment:
+      DATABASE_URL: sqlite:////tmp/teamtracks-test.db
+      STORAGE_ROOT: /tmp/teamtracks-storage
+      SOURCE_ROOT: /tmp/teamtracks-imports
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.development
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+
+  frontend-test:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.development
+    command: ["npm", "test"]
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+
+volumes:
+  db_data:
+  media_storage:
+  source_imports:
+  frontend_node_modules:
