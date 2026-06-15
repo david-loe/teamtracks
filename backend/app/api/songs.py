@@ -8,9 +8,10 @@ from app.domain import StemStatus
 from app.models.song import Song
 from app.schemas.song import SongCreate, SongListItem, SongRead
 from app.services.storage import StorageService, get_storage_service
+from app.services.auth import require_admin_session
 
 
-router = APIRouter(prefix="/api/songs", tags=["songs"])
+router = APIRouter(tags=["admin-songs"], dependencies=[Depends(require_admin_session)])
 
 
 def get_song_or_404(db: Session, song_id: int) -> Song:
@@ -20,7 +21,8 @@ def get_song_or_404(db: Session, song_id: int) -> Song:
     return song
 
 
-@router.get("", response_model=list[SongListItem])
+@router.get("/api/admin/songs", response_model=list[SongListItem])
+@router.get("/api/songs", response_model=list[SongListItem], include_in_schema=False)
 def list_songs(db: Session = Depends(get_db)) -> list[SongListItem]:
     songs = db.scalars(select(Song).options(selectinload(Song.stems)).order_by(Song.created_at.desc())).all()
     return [
@@ -37,7 +39,8 @@ def list_songs(db: Session = Depends(get_db)) -> list[SongListItem]:
     ]
 
 
-@router.post("", response_model=SongRead, status_code=status.HTTP_201_CREATED)
+@router.post("/api/admin/songs", response_model=SongRead, status_code=status.HTTP_201_CREATED)
+@router.post("/api/songs", response_model=SongRead, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def create_song(payload: SongCreate, db: Session = Depends(get_db)) -> Song:
     song = Song(title=payload.title, slug=payload.slug, description=payload.description)
     db.add(song)
@@ -50,12 +53,14 @@ def create_song(payload: SongCreate, db: Session = Depends(get_db)) -> Song:
     return song
 
 
-@router.get("/{song_id}", response_model=SongRead)
+@router.get("/api/admin/songs/{song_id}", response_model=SongRead)
+@router.get("/api/songs/{song_id}", response_model=SongRead, include_in_schema=False)
 def get_song(song_id: int, db: Session = Depends(get_db)) -> Song:
     return get_song_or_404(db, song_id)
 
 
-@router.delete("/{song_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/api/admin/songs/{song_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/api/songs/{song_id}", status_code=status.HTTP_204_NO_CONTENT, include_in_schema=False)
 def delete_song(
     song_id: int,
     db: Session = Depends(get_db),

@@ -129,7 +129,7 @@ def test_media_rejects_missing_and_not_ready_files(client: TestClient) -> None:
     stem = upload_stem(client, song["id"])
 
     not_ready_response = client.get(f"/media/songs/{song['id']}/stems/{stem['id']}.m4a")
-    assert not_ready_response.status_code == 409
+    assert not_ready_response.status_code == 404
 
     mark_stem_ready(client, song["id"], stem["id"], write_file=False)
     missing_file_response = client.get(f"/media/songs/{song['id']}/stems/{stem['id']}.m4a")

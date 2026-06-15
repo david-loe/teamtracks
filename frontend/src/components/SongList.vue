@@ -36,8 +36,8 @@ defineEmits<{
           <td>{{ song.readyStemCount }} / {{ song.stemCount }} ready</td>
           <td>{{ formatDuration(song.durationMs) }}</td>
           <td class="actions-cell">
-            <RouterLink class="button button-secondary" :to="`/songs/${song.id}/admin`">Admin</RouterLink>
-            <RouterLink class="button button-secondary" :to="`/songs/${song.id}/player`">Player</RouterLink>
+            <RouterLink class="button button-secondary" :to="`/admin/songs/${song.id}`">Verwalten</RouterLink>
+            <RouterLink v-if="song.status === 'ready'" class="button button-secondary" :to="`/songs/${song.id}`">Player</RouterLink>
             <button
               class="button button-danger"
               type="button"

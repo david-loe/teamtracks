@@ -51,7 +51,6 @@ function seek(event: Event): void {
       </div>
       <div class="header-actions">
         <RouterLink class="button button-secondary" to="/songs">Zur Liste</RouterLink>
-        <RouterLink class="button button-secondary" :to="`/songs/${id}/admin`">Admin</RouterLink>
       </div>
     </div>
 
@@ -147,6 +146,9 @@ function seek(event: Event): void {
           :muted="playerStore.mutedStems"
           :gains="playerStore.stemGains"
           :disabled="!playerStore.controlsEnabled"
+          :min-gain-db="playerStore.playerSettings.stemGainMinDb"
+          :max-gain-db="playerStore.playerSettings.stemGainMaxDb"
+          :step-gain-db="playerStore.playerSettings.stemGainStepDb"
           @set-muted="playerStore.setStemMuted"
           @set-gain="playerStore.setStemGain"
         />
@@ -160,6 +162,7 @@ function seek(event: Event): void {
           :focused-gain-db="playerStore.focusedGainDb"
           :background-gain-db="playerStore.backgroundGainDb"
           :disabled="!playerStore.controlsEnabled"
+          :settings="playerStore.playerSettings"
           @set-focus-stem="playerStore.setFocusStem"
           @set-focus-gains="playerStore.setFocusGains"
         />

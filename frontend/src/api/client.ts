@@ -25,6 +25,7 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   const response = await fetch(resolveApiUrl(path), {
     ...init,
     headers,
+    credentials: init?.credentials ?? "include",
   });
 
   if (!response.ok) {

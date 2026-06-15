@@ -4,10 +4,11 @@ from sqlalchemy.orm import Session, selectinload
 from app.domain import SongStatus, StemStatus
 from app.models.song import Song
 from app.models.stem import Stem
+from app.models.app_settings import AppSettings
 from app.schemas.manifest import ManifestSong, ManifestStem, SongManifest
 
 
-def build_song_manifest(song: Song) -> SongManifest:
+def build_song_manifest(song: Song, settings: AppSettings) -> SongManifest:
     stems = sorted(song.stems, key=lambda stem: (stem.created_at, stem.id))
     manifest_stems = [build_manifest_stem(song.id, stem) for stem in stems]
     playable = is_song_playable(song, stems)
@@ -22,6 +23,7 @@ def build_song_manifest(song: Song) -> SongManifest:
         ),
         playable=playable,
         stems=manifest_stems,
+        player_settings=settings,
     )
 
 

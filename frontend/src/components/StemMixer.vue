@@ -6,6 +6,9 @@ defineProps<{
   muted: Record<number, boolean>;
   gains: Record<number, number>;
   disabled: boolean;
+  minGainDb: number;
+  maxGainDb: number;
+  stepGainDb: number;
 }>();
 
 defineEmits<{
@@ -38,9 +41,9 @@ defineEmits<{
           :id="`stem-${stem.id}-gain`"
           :name="`stem-${stem.id}-gain`"
           type="range"
-          min="-24"
-          max="6"
-          step="1"
+          :min="minGainDb"
+          :max="maxGainDb"
+          :step="stepGainDb"
           :value="gains[stem.id] ?? 0"
           :disabled="disabled"
           @input="$emit('setGain', stem.id, Number(($event.target as HTMLInputElement).value))"

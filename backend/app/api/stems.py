@@ -8,9 +8,10 @@ from app.domain import StemRole, StemStatus
 from app.models.stem import Stem
 from app.schemas.stem import StemImport, StemRead
 from app.services.storage import StorageService, get_storage_service
+from app.services.auth import require_admin_session
 
 
-router = APIRouter(tags=["stems"])
+router = APIRouter(tags=["admin-stems"], dependencies=[Depends(require_admin_session)])
 
 
 def get_stem_or_404(db: Session, stem_id: int) -> Stem:
@@ -20,13 +21,15 @@ def get_stem_or_404(db: Session, stem_id: int) -> Stem:
     return stem
 
 
-@router.get("/api/songs/{song_id}/stems", response_model=list[StemRead])
+@router.get("/api/songs/{song_id}/stems", response_model=list[StemRead], include_in_schema=False)
+@router.get("/api/admin/songs/{song_id}/stems", response_model=list[StemRead])
 def list_stems(song_id: int, db: Session = Depends(get_db)) -> list[Stem]:
     get_song_or_404(db, song_id)
     return list(db.scalars(select(Stem).where(Stem.song_id == song_id).order_by(Stem.created_at.asc())))
 
 
-@router.post("/api/songs/{song_id}/stems/upload", response_model=StemRead, status_code=status.HTTP_201_CREATED)
+@router.post("/api/songs/{song_id}/stems/upload", response_model=StemRead, status_code=status.HTTP_201_CREATED, include_in_schema=False)
+@router.post("/api/admin/songs/{song_id}/stems/upload", response_model=StemRead, status_code=status.HTTP_201_CREATED)
 def upload_stem(
     song_id: int,
     name: str = Form(..., min_length=1, max_length=200),
@@ -57,7 +60,8 @@ def upload_stem(
     return stem
 
 
-@router.post("/api/songs/{song_id}/stems/import", response_model=StemRead, status_code=status.HTTP_201_CREATED)
+@router.post("/api/songs/{song_id}/stems/import", response_model=StemRead, status_code=status.HTTP_201_CREATED, include_in_schema=False)
+@router.post("/api/admin/songs/{song_id}/stems/import", response_model=StemRead, status_code=status.HTTP_201_CREATED)
 def import_stem(
     song_id: int,
     payload: StemImport,
@@ -86,7 +90,8 @@ def import_stem(
     return stem
 
 
-@router.delete("/api/stems/{stem_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/api/stems/{stem_id}", status_code=status.HTTP_204_NO_CONTENT, include_in_schema=False)
+@router.delete("/api/admin/stems/{stem_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_stem(
     stem_id: int,
     db: Session = Depends(get_db),

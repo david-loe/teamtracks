@@ -18,6 +18,10 @@ export interface ConversionJob {
   stemId: number | null;
   status: ConversionJobStatus;
   requestedBy: string | null;
+  monoBitrateKbps: number;
+  stereoBitrateKbps: number;
+  targetSampleRate: number;
+  durationToleranceMs: number;
   startedAt: string | null;
   finishedAt: string | null;
   errorMessage: string | null;
@@ -29,13 +33,13 @@ export function createConversionJobs(
   songId: number,
   input: ConversionJobCreateInput = {},
 ): Promise<ConversionJobBatch> {
-  return apiJson<ConversionJobBatch>(`/api/songs/${songId}/conversion-jobs`, input);
+  return apiJson<ConversionJobBatch>(`/api/admin/songs/${songId}/conversion-jobs`, input);
 }
 
 export function getConversionJob(jobId: number): Promise<ConversionJob> {
-  return apiRequest<ConversionJob>(`/api/conversion-jobs/${jobId}`);
+  return apiRequest<ConversionJob>(`/api/admin/conversion-jobs/${jobId}`);
 }
 
 export function listConversionJobs(songId: number): Promise<ConversionJob[]> {
-  return apiRequest<ConversionJob[]>(`/api/songs/${songId}/conversion-jobs`);
+  return apiRequest<ConversionJob[]>(`/api/admin/songs/${songId}/conversion-jobs`);
 }

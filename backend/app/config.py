@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +11,13 @@ class Settings(BaseSettings):
     storage_root: Path = Field(default=Path("/data/storage"), validation_alias="STORAGE_ROOT")
     source_root: Path = Field(default=Path("/data/imports"), validation_alias="SOURCE_ROOT")
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    admin_password: SecretStr = Field(default=SecretStr("change-me"), validation_alias="ADMIN_PASSWORD")
+    admin_session_secret: SecretStr = Field(
+        default=SecretStr("development-session-secret-change-me"),
+        validation_alias="ADMIN_SESSION_SECRET",
+    )
+    admin_session_hours: int = Field(default=12, validation_alias="ADMIN_SESSION_HOURS", ge=1, le=720)
+    admin_cookie_secure: bool = Field(default=False, validation_alias="ADMIN_COOKIE_SECURE")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -2,11 +2,14 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
 
 from app.db.session import get_db
 from app.domain import StemStatus
+from app.models.song import Song
 from app.models.stem import Stem
+from app.services.manifest import is_song_playable
 from app.services.storage import StorageService, get_storage_service
 
 
@@ -26,7 +29,11 @@ def get_stem_media(
     if stem is None or stem.song_id != song_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media file not found")
     if stem.status != StemStatus.READY.value or stem.converted_path is None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Stem is not ready for playback")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media file not found")
+
+    song = db.scalar(select(Song).where(Song.id == song_id).options(selectinload(Song.stems)))
+    if song is None or not is_song_playable(song, song.stems):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media file not found")
 
     media_path = Path(stem.converted_path)
     expected_path = storage.converted_path(song_id, stem_id).resolve()

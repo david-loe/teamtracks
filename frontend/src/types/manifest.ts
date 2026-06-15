@@ -10,6 +10,20 @@ export interface SongManifest {
   };
   playable: boolean;
   stems: StemManifestItem[];
+  playerSettings?: PlayerSettings;
+}
+
+export interface PlayerSettings {
+  stemGainDefaultDb: number;
+  stemGainMinDb: number;
+  stemGainMaxDb: number;
+  stemGainStepDb: number;
+  focusGainDefaultDb: number;
+  focusGainMinDb: number;
+  focusGainMaxDb: number;
+  backgroundGainDefaultDb: number;
+  backgroundGainMinDb: number;
+  backgroundGainMaxDb: number;
 }
 
 export interface StemManifestItem {

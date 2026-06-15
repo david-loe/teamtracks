@@ -12,14 +12,11 @@ from app.models.stem import Stem
 from app.services.probing import AudioMetadata, FFprobeService, ProbeError
 from app.services.storage import StorageService
 
-
-DURATION_TOLERANCE_MS = 100
 MAX_PROCESS_ERROR_LENGTH = 2000
-PREFERRED_SAMPLE_RATES = {44100, 48000}
 
 
 class ConversionError(Exception):
-    """Raised when a stem cannot be converted into an MVP playback asset."""
+    """Raised when a stem cannot be converted into an playback asset."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +56,15 @@ class ConversionService:
         try:
             if job.stem is None:
                 raise ConversionError("Conversion job has no stem")
-            self.convert_stem(db, job.song, job.stem)
+            self.convert_stem(
+                db,
+                job.song,
+                job.stem,
+                target_sample_rate=job.target_sample_rate,
+                duration_tolerance_ms=job.duration_tolerance_ms,
+                mono_bitrate_kbps=job.mono_bitrate_kbps,
+                stereo_bitrate_kbps=job.stereo_bitrate_kbps,
+            )
         except Exception as exc:
             message = truncate_process_error(str(exc))
             job.status = ConversionJobStatus.FAILED.value
@@ -81,7 +86,17 @@ class ConversionService:
         db.refresh(job)
         return job
 
-    def convert_stem(self, db: Session, song: Song, stem: Stem) -> None:
+    def convert_stem(
+        self,
+        db: Session,
+        song: Song,
+        stem: Stem,
+        *,
+        target_sample_rate: int = 48000,
+        duration_tolerance_ms: int = 100,
+        mono_bitrate_kbps: int = 96,
+        stereo_bitrate_kbps: int = 160,
+    ) -> None:
         if stem.source_path is None:
             raise ConversionError("Stem has no source file")
 
@@ -94,19 +109,24 @@ class ConversionService:
         db.commit()
 
         metadata = self.probe_service.probe_wav(source_path)
-        targets = self.ensure_song_targets(db, song)
+        targets = self.ensure_song_targets(db, song, target_sample_rate)
         duration_delta = abs(metadata.duration_ms - targets.duration_ms)
-        if duration_delta > DURATION_TOLERANCE_MS:
+        if duration_delta > duration_tolerance_ms:
             stem.duration_ms = metadata.duration_ms
             stem.sample_rate = metadata.sample_rate
             stem.channels = metadata.channels
             raise ConversionError(
                 f"Stem duration differs from song target by {duration_delta} ms; maximum allowed is "
-                f"{DURATION_TOLERANCE_MS} ms"
+                f"{duration_tolerance_ms} ms"
             )
 
         output_path = self.storage.converted_path(song.id, stem.id)
-        self.run_ffmpeg(source_path, output_path, targets, metadata.channels)
+        bitrate_kbps = bitrate_kbps_for_channels(
+            metadata.channels,
+            mono_bitrate_kbps=mono_bitrate_kbps,
+            stereo_bitrate_kbps=stereo_bitrate_kbps,
+        )
+        self.run_ffmpeg(source_path, output_path, targets, metadata.channels, bitrate_kbps)
 
         stem.converted_path = str(output_path)
         stem.source_format = "wav"
@@ -115,29 +135,31 @@ class ConversionService:
         stem.channels = metadata.channels
         stem.duration_ms = targets.duration_ms
         stem.file_size_bytes = output_path.stat().st_size
-        stem.bitrate_kbps = bitrate_kbps_for_channels(metadata.channels)
+        stem.bitrate_kbps = bitrate_kbps
         stem.error_message = None
         stem.status = StemStatus.READY.value
         db.flush()
 
-    def ensure_song_targets(self, db: Session, song: Song) -> ConversionTargets:
-        if song.target_sample_rate is not None and song.target_duration_ms is not None:
-            return ConversionTargets(sample_rate=song.target_sample_rate, duration_ms=song.target_duration_ms)
-
+    def ensure_song_targets(self, db: Session, song: Song, target_sample_rate: int) -> ConversionTargets:
         valid_metadata = self._probe_song_sources(db, song.id)
         if not valid_metadata:
             raise ConversionError("No valid WAV stems available to determine song targets")
 
-        if song.target_sample_rate is None:
-            first_sample_rate = valid_metadata[0].sample_rate
-            song.target_sample_rate = first_sample_rate if first_sample_rate in PREFERRED_SAMPLE_RATES else 48000
+        song.target_sample_rate = target_sample_rate
         if song.target_duration_ms is None:
             song.target_duration_ms = max(metadata.duration_ms for metadata in valid_metadata)
 
         db.flush()
         return ConversionTargets(sample_rate=song.target_sample_rate, duration_ms=song.target_duration_ms)
 
-    def run_ffmpeg(self, source_path: Path, output_path: Path, targets: ConversionTargets, channels: int) -> None:
+    def run_ffmpeg(
+        self,
+        source_path: Path,
+        output_path: Path,
+        targets: ConversionTargets,
+        channels: int,
+        bitrate_kbps: int,
+    ) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         temporary_path = output_path.with_name(f".{output_path.stem}.tmp{output_path.suffix}")
         temporary_path.unlink(missing_ok=True)
@@ -149,6 +171,7 @@ class ConversionService:
             target_sample_rate=targets.sample_rate,
             target_duration_ms=targets.duration_ms,
             channels=channels,
+            bitrate_kbps=bitrate_kbps,
         )
         result = subprocess.run(command, check=False, capture_output=True, text=True)
         if result.returncode != 0:
@@ -184,9 +207,10 @@ def build_ffmpeg_command(
     target_sample_rate: int,
     target_duration_ms: int,
     channels: int,
+    bitrate_kbps: int | None = None,
 ) -> list[str]:
     duration_seconds = f"{target_duration_ms / 1000:.3f}"
-    bitrate = f"{bitrate_kbps_for_channels(channels)}k"
+    bitrate = f"{bitrate_kbps if bitrate_kbps is not None else bitrate_kbps_for_channels(channels)}k"
     return [
         ffmpeg_binary,
         "-y",
@@ -213,11 +237,16 @@ def build_ffmpeg_command(
     ]
 
 
-def bitrate_kbps_for_channels(channels: int) -> int:
+def bitrate_kbps_for_channels(
+    channels: int,
+    *,
+    mono_bitrate_kbps: int = 96,
+    stereo_bitrate_kbps: int = 160,
+) -> int:
     if channels == 1:
-        return 96
+        return mono_bitrate_kbps
     if channels == 2:
-        return 160
+        return stereo_bitrate_kbps
     raise ConversionError("Only mono and stereo WAV files are supported")
 
 

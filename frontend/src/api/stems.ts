@@ -37,7 +37,7 @@ export interface StemUploadInput {
 }
 
 export function listStems(songId: number): Promise<Stem[]> {
-  return apiRequest<Stem[]>(`/api/songs/${songId}/stems`);
+  return apiRequest<Stem[]>(`/api/admin/songs/${songId}/stems`);
 }
 
 export function uploadStem(songId: number, input: StemUploadInput): Promise<Stem> {
@@ -46,16 +46,16 @@ export function uploadStem(songId: number, input: StemUploadInput): Promise<Stem
   formData.set("role", input.role);
   formData.set("file", input.file);
 
-  return apiRequest<Stem>(`/api/songs/${songId}/stems/upload`, {
+  return apiRequest<Stem>(`/api/admin/songs/${songId}/stems/upload`, {
     method: "POST",
     body: formData,
   });
 }
 
 export function importStem(songId: number, input: StemImportInput): Promise<Stem> {
-  return apiJson<Stem>(`/api/songs/${songId}/stems/import`, input);
+  return apiJson<Stem>(`/api/admin/songs/${songId}/stems/import`, input);
 }
 
 export function deleteStem(stemId: number): Promise<void> {
-  return apiRequest<void>(`/api/stems/${stemId}`, { method: "DELETE" });
+  return apiRequest<void>(`/api/admin/stems/${stemId}`, { method: "DELETE" });
 }

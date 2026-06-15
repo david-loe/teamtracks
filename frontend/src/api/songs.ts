@@ -31,17 +31,24 @@ export interface SongListItem {
 }
 
 export function listSongs(): Promise<SongListItem[]> {
-  return apiRequest<SongListItem[]>("/api/songs");
+  return apiRequest<SongListItem[]>("/api/admin/songs");
+}
+
+export function listPublicSongs(query = ""): Promise<SongListItem[]> {
+  const params = new URLSearchParams();
+  if (query.trim()) params.set("query", query.trim());
+  const suffix = params.size ? `?${params}` : "";
+  return apiRequest<SongListItem[]>(`/api/public/songs${suffix}`);
 }
 
 export function createSong(input: SongCreateInput): Promise<Song> {
-  return apiJson<Song>("/api/songs", input);
+  return apiJson<Song>("/api/admin/songs", input);
 }
 
 export function getSong(songId: number): Promise<Song> {
-  return apiRequest<Song>(`/api/songs/${songId}`);
+  return apiRequest<Song>(`/api/admin/songs/${songId}`);
 }
 
 export function deleteSong(songId: number): Promise<void> {
-  return apiRequest<void>(`/api/songs/${songId}`, { method: "DELETE" });
+  return apiRequest<void>(`/api/admin/songs/${songId}`, { method: "DELETE" });
 }

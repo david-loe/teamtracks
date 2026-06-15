@@ -120,6 +120,24 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     }
   }
 
+  async function reconvert(songId: number): Promise<boolean> {
+    const stemIds = stems.value.filter((stem) => stem.sourceFilename !== null).map((stem) => stem.id);
+    if (stemIds.length === 0) return false;
+    startingConversion.value = true;
+    jobError.value = null;
+    try {
+      await conversionApi.createConversionJobs(songId, { stemIds, requestedBy: "admin-ui-reconvert" });
+      await loadJobs(songId);
+      startPolling(songId);
+      return true;
+    } catch (err) {
+      jobError.value = getErrorMessage(err);
+      return false;
+    } finally {
+      startingConversion.value = false;
+    }
+  }
+
   function startPolling(songId: number): void {
     if (pollingSongId.value === songId && pollTimer !== null) {
       return;
@@ -190,6 +208,7 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     importFromSource,
     removeStem,
     startConversion,
+    reconvert,
     startPolling,
     stopPolling,
     clearError,

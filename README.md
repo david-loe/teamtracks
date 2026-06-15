@@ -12,12 +12,16 @@ Voraussetzungen:
 Start:
 
 ```sh
+cp .env.example .env
+# ADMIN_PASSWORD und ADMIN_SESSION_SECRET in .env ersetzen
 docker compose up --build
 ```
 
 Danach:
 
 - Frontend: http://localhost:5173
+- User-Ansicht: http://localhost:5173/songs
+- Admin-Login: http://localhost:5173/admin/login
 - Backend Healthcheck: http://localhost:8000/health
 - API und Media liegen unter `http://localhost:8000/api/...` und `http://localhost:8000/media/...`
 
@@ -73,12 +77,12 @@ npm run build
 ## Beispiel-Workflow
 
 1. `docker compose up --build` starten.
-2. Im Frontend `Songs` oeffnen und einen Song anlegen.
-3. In der Admin-Ansicht WAV-Stems hochladen
+2. Unter `/admin/login` anmelden und einen Song anlegen.
+3. In der Admin-Ansicht WAV-Stems hochladen.
 4. Fuer jeden Stem Rolle und Name setzen.
 5. Conversion starten.
 6. Warten, bis die Stems den Status `ready` haben und der Song abspielbereit ist.
-7. Den Player oeffnen.
+7. Der Song erscheint nun in der oeffentlichen Suche; dort den Player oeffnen.
 8. Warten, bis alle Stems automatisch geladen und dekodiert wurden.
 9. `Play` klicken. Beim ersten Klick wird der Audio-Kontext direkt aus der Benutzerinteraktion gestartet.
 10. Danach Play, Pause, Stop, Seek, Mute und Fokus verwenden.

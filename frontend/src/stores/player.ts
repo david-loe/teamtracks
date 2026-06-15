@@ -4,14 +4,17 @@ import { computed, ref, shallowRef } from "vue";
 import * as manifestApi from "@/api/manifest";
 import type { AudioEngine, StemLoadProgress } from "@/audio/AudioEngine";
 import { ToneAudioEngine } from "@/audio/ToneAudioEngine";
-import type { SongManifest } from "@/types/manifest";
+import type { PlayerSettings, SongManifest } from "@/types/manifest";
 import { isPlayableStem } from "@/types/manifest";
 
 type PlaybackState = "stopped" | "paused" | "playing";
 
 const CURRENT_TIME_INTERVAL_MS = 200;
-const DEFAULT_FOCUSED_GAIN_DB = 0;
-const DEFAULT_BACKGROUND_GAIN_DB = -12;
+const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
+  stemGainDefaultDb: 0, stemGainMinDb: -24, stemGainMaxDb: 6, stemGainStepDb: 1,
+  focusGainDefaultDb: 0, focusGainMinDb: -12, focusGainMaxDb: 6,
+  backgroundGainDefaultDb: -12, backgroundGainMinDb: -24, backgroundGainMaxDb: 0,
+};
 
 export const usePlayerStore = defineStore("player", () => {
   const manifest = ref<SongManifest | null>(null);
@@ -28,8 +31,9 @@ export const usePlayerStore = defineStore("player", () => {
   const mutedStems = ref<Record<number, boolean>>({});
   const stemGains = ref<Record<number, number>>({});
   const focusedStemId = ref<number | null>(null);
-  const focusedGainDb = ref(DEFAULT_FOCUSED_GAIN_DB);
-  const backgroundGainDb = ref(DEFAULT_BACKGROUND_GAIN_DB);
+  const playerSettings = computed(() => manifest.value?.playerSettings ?? DEFAULT_PLAYER_SETTINGS);
+  const focusedGainDb = ref(DEFAULT_PLAYER_SETTINGS.focusGainDefaultDb);
+  const backgroundGainDb = ref(DEFAULT_PLAYER_SETTINGS.backgroundGainDefaultDb);
   const engine = shallowRef<AudioEngine | null>(null);
   let currentTimeTimer: number | null = null;
   let pageLoadId = 0;
@@ -64,6 +68,8 @@ export const usePlayerStore = defineStore("player", () => {
         return;
       }
       manifest.value = nextManifest;
+      focusedGainDb.value = playerSettings.value.focusGainDefaultDb;
+      backgroundGainDb.value = playerSettings.value.backgroundGainDefaultDb;
       initializeStemControls();
     } catch (err) {
       if (requestId === pageLoadId) {
@@ -219,8 +225,8 @@ export const usePlayerStore = defineStore("player", () => {
     mutedStems.value = {};
     stemGains.value = {};
     focusedStemId.value = null;
-    focusedGainDb.value = DEFAULT_FOCUSED_GAIN_DB;
-    backgroundGainDb.value = DEFAULT_BACKGROUND_GAIN_DB;
+    focusedGainDb.value = DEFAULT_PLAYER_SETTINGS.focusGainDefaultDb;
+    backgroundGainDb.value = DEFAULT_PLAYER_SETTINGS.backgroundGainDefaultDb;
   }
 
   function updateLoadProgress(requestId: number, progress: StemLoadProgress): void {
@@ -238,7 +244,7 @@ export const usePlayerStore = defineStore("player", () => {
     const nextGains: Record<number, number> = {};
     for (const stem of playableStems.value) {
       nextMuted[stem.id] = false;
-      nextGains[stem.id] = 0;
+      nextGains[stem.id] = playerSettings.value.stemGainDefaultDb;
     }
     mutedStems.value = nextMuted;
     stemGains.value = nextGains;
@@ -314,6 +320,7 @@ export const usePlayerStore = defineStore("player", () => {
     focusedStemId,
     focusedGainDb,
     backgroundGainDb,
+    playerSettings,
     playableStems,
     controlsEnabled,
     load,

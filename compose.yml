@@ -4,10 +4,8 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     command: ["alembic", "upgrade", "head"]
-    environment:
-      DATABASE_URL: sqlite:////data/db/teamtracks.db
-      STORAGE_ROOT: /data/storage
-      SOURCE_ROOT: /data/imports
+    env_file:
+      - .env
     volumes:
       - db_data:/data/db
       - media_storage:/data/storage
@@ -17,10 +15,8 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    environment:
-      DATABASE_URL: sqlite:////data/db/teamtracks.db
-      STORAGE_ROOT: /data/storage
-      SOURCE_ROOT: /data/imports
+    env_file:
+      - .env
     ports:
       - "8000:8000"
     depends_on:
@@ -36,10 +32,8 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     command: ["python", "-m", "app.worker"]
-    environment:
-      DATABASE_URL: sqlite:////data/db/teamtracks.db
-      STORAGE_ROOT: /data/storage
-      SOURCE_ROOT: /data/imports
+    env_file:
+      - .env
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -56,10 +50,14 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     command: ["pytest"]
+    env_file:
+      - .env
     environment:
       DATABASE_URL: sqlite:////tmp/teamtracks-test.db
       STORAGE_ROOT: /tmp/teamtracks-storage
       SOURCE_ROOT: /tmp/teamtracks-imports
+      ADMIN_PASSWORD: test-password
+      ADMIN_SESSION_SECRET: test-session-secret
 
   frontend:
     build:

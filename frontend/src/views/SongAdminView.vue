@@ -67,8 +67,8 @@ async function deleteStem(stemId: number): Promise<void> {
         <p class="muted">WAV-Stems hochladen oder importieren und Conversion-Jobs starten.</p>
       </div>
       <div class="header-actions">
-        <RouterLink class="button button-secondary" to="/songs">Zur Liste</RouterLink>
-        <RouterLink class="button button-secondary" :to="`/songs/${id}/player`">Player</RouterLink>
+        <RouterLink class="button button-secondary" to="/admin/songs">Zur Liste</RouterLink>
+        <RouterLink v-if="songsStore.currentSong?.status === 'ready'" class="button button-secondary" :to="`/songs/${id}`">Player</RouterLink>
       </div>
     </div>
 
@@ -152,6 +152,14 @@ async function deleteStem(stemId: number): Promise<void> {
           @click="stemsStore.startConversion(songId)"
         >
           {{ stemsStore.startingConversion ? "Wird gestartet..." : "Conversion starten" }}
+        </button>
+        <button
+          class="button button-secondary"
+          type="button"
+          :disabled="stemsStore.startingConversion || stemsStore.stems.length === 0"
+          @click="stemsStore.reconvert(songId)"
+        >
+          Neu konvertieren
         </button>
       </div>
       <p v-if="stemsStore.jobError" class="error-text">{{ stemsStore.jobError }}</p>

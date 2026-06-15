@@ -58,6 +58,10 @@ const runningJob: ConversionJob = {
   stemId: 1,
   status: "running",
   requestedBy: "admin-ui",
+  monoBitrateKbps: 96,
+  stereoBitrateKbps: 160,
+  targetSampleRate: 48000,
+  durationToleranceMs: 100,
   startedAt: "2026-01-01T00:00:00Z",
   finishedAt: null,
   errorMessage: null,
@@ -124,5 +128,21 @@ describe("useAdminStemsStore", () => {
     expect(ok).toBe(true);
     expect(store.stems).toEqual([]);
     expect(store.jobs).toEqual([]);
+  });
+
+  it("queues all source stems for explicit reconversion", async () => {
+    vi.mocked(stemsApi.listStems).mockResolvedValue([uploadedStem, readyStem]);
+    vi.mocked(conversionApi.createConversionJobs).mockResolvedValue({ jobIds: [1, 2], status: "queued" });
+    vi.mocked(conversionApi.listConversionJobs).mockResolvedValue([]);
+
+    const store = useAdminStemsStore();
+    await store.load(10);
+    const ok = await store.reconvert(10);
+
+    expect(ok).toBe(true);
+    expect(conversionApi.createConversionJobs).toHaveBeenCalledWith(10, {
+      stemIds: [1, 2],
+      requestedBy: "admin-ui-reconvert",
+    });
   });
 });

@@ -4,13 +4,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 PROBE_TIMEOUT_SECONDS = 20
 MAX_ERROR_LENGTH = 2000
 
 
 class ProbeError(Exception):
-    """Raised when an audio source cannot be probed or is not MVP-compatible."""
+    """Raised when an audio source cannot be probed or is not compatible."""
 
 
 @dataclass(frozen=True, slots=True)

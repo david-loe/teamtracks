@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PlayableStemManifestItem } from "@/types/manifest";
+import type { PlayerSettings } from "@/types/manifest";
 
 const props = defineProps<{
   stems: PlayableStemManifestItem[];
@@ -7,6 +8,7 @@ const props = defineProps<{
   focusedGainDb: number;
   backgroundGainDb: number;
   disabled: boolean;
+  settings: PlayerSettings;
 }>();
 
 const emit = defineEmits<{
@@ -45,8 +47,8 @@ function updateBackgroundGain(value: string): void {
         id="focus-gain"
         name="focusGainDb"
         type="range"
-        min="-12"
-        max="6"
+        :min="settings.focusGainMinDb"
+        :max="settings.focusGainMaxDb"
         step="1"
         :value="focusedGainDb"
         :disabled="disabled"
@@ -60,8 +62,8 @@ function updateBackgroundGain(value: string): void {
         id="background-gain"
         name="backgroundGainDb"
         type="range"
-        min="-24"
-        max="0"
+        :min="settings.backgroundGainMinDb"
+        :max="settings.backgroundGainMaxDb"
         step="1"
         :value="backgroundGainDb"
         :disabled="disabled"

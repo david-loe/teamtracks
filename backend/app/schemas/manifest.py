@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain import StemRole, StemStatus
+from app.schemas.settings import PlayerSettings
 
 
 class ManifestSong(BaseModel):
@@ -35,5 +36,6 @@ class SongManifest(BaseModel):
     song: ManifestSong
     playable: bool
     stems: list[ManifestStem]
+    player_settings: PlayerSettings = Field(alias="playerSettings")
 
     model_config = ConfigDict(populate_by_name=True)

@@ -128,6 +128,34 @@ describe("usePlayerStore", () => {
     store.reset();
   });
 
+  it("applies player defaults delivered by the manifest", async () => {
+    const configuredManifest: SongManifest = {
+      ...manifest,
+      playerSettings: {
+        stemGainDefaultDb: -3,
+        stemGainMinDb: -30,
+        stemGainMaxDb: 3,
+        stemGainStepDb: 2,
+        focusGainDefaultDb: 1,
+        focusGainMinDb: -10,
+        focusGainMaxDb: 5,
+        backgroundGainDefaultDb: -16,
+        backgroundGainMinDb: -30,
+        backgroundGainMaxDb: -1,
+      },
+    };
+    vi.mocked(manifestApi.getSongManifest).mockResolvedValue(configuredManifest);
+
+    const store = usePlayerStore();
+    await store.load(10);
+
+    expect(store.stemGains).toEqual({ 1: -3, 2: -3 });
+    expect(store.focusedGainDb).toBe(1);
+    expect(store.backgroundGainDb).toBe(-16);
+    expect(engineMocks.instances[0].setStemGain).toHaveBeenCalledWith(2, -3);
+    store.reset();
+  });
+
   it("keeps playback disabled while stems are loading", async () => {
     vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
     const pendingLoad = deferred<void>();

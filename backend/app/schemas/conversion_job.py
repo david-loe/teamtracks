@@ -25,6 +25,10 @@ class ConversionJobRead(BaseModel):
     stem_id: int | None = Field(default=None, alias="stemId")
     status: ConversionJobStatus
     requested_by: str | None = Field(default=None, alias="requestedBy")
+    mono_bitrate_kbps: int = Field(alias="monoBitrateKbps")
+    stereo_bitrate_kbps: int = Field(alias="stereoBitrateKbps")
+    target_sample_rate: int = Field(alias="targetSampleRate")
+    duration_tolerance_ms: int = Field(alias="durationToleranceMs")
     started_at: datetime | None = Field(default=None, alias="startedAt")
     finished_at: datetime | None = Field(default=None, alias="finishedAt")
     error_message: str | None = Field(default=None, alias="errorMessage")
