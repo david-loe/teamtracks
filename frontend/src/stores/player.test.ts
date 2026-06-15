@@ -2,15 +2,30 @@ import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as manifestApi from "@/api/manifest";
-import type { SongManifest } from "@/types/manifest";
 import { usePlayerStore } from "@/stores/player";
+import type { SongManifest } from "@/types/manifest";
 
-const engineMocks = vi.hoisted(() => ({
-  instances: [] as any[],
-  ToneAudioEngine: vi.fn(() => {
+const engineMocks = vi.hoisted(() => {
+  const behavior = {
+    loadPromise: null as Promise<void> | null,
+    loadError: null as Error | null,
+    startPromise: null as Promise<void> | null,
+    startError: null as Error | null,
+  };
+  const instances: any[] = [];
+  const ToneAudioEngine = vi.fn(() => {
     const engine = {
-      initializeFromUserGesture: vi.fn().mockResolvedValue(undefined),
+      initializeFromUserGesture: vi.fn(async () => {
+        await behavior.startPromise;
+        if (behavior.startError) {
+          throw behavior.startError;
+        }
+      }),
       loadManifest: vi.fn(async (_manifest, onProgress) => {
+        await behavior.loadPromise;
+        if (behavior.loadError) {
+          throw behavior.loadError;
+        }
         onProgress({ stemId: 1, loadedBytes: 100, totalBytes: 100, ratio: 1 });
         onProgress({ stemId: 2, loadedBytes: 100, totalBytes: 100, ratio: 1 });
       }),
@@ -25,10 +40,11 @@ const engineMocks = vi.hoisted(() => ({
       getDuration: vi.fn(() => 120),
       dispose: vi.fn(),
     };
-    engineMocks.instances.push(engine);
+    instances.push(engine);
     return engine;
-  }),
-}));
+  });
+  return { behavior, instances, ToneAudioEngine };
+});
 
 vi.mock("@/api/manifest", () => ({
   getSongManifest: vi.fn(),
@@ -87,69 +103,65 @@ describe("usePlayerStore", () => {
     vi.useRealTimers();
     vi.clearAllMocks();
     engineMocks.instances.length = 0;
+    engineMocks.behavior.loadPromise = null;
+    engineMocks.behavior.loadError = null;
+    engineMocks.behavior.startPromise = null;
+    engineMocks.behavior.startError = null;
   });
 
-  it("loads a manifest and initializes playable stem controls", async () => {
+  it("loads playable stems automatically without starting the audio context", async () => {
     vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
 
     const store = usePlayerStore();
     await store.load(10);
-
-    expect(store.manifest).toEqual(manifest);
-    expect(store.playableStems).toHaveLength(2);
-    expect(store.mutedStems).toEqual({ 1: false, 2: false });
-    expect(store.stemGains).toEqual({ 1: 0, 2: 0 });
-    expect(store.controlsEnabled).toBe(false);
-  });
-
-  it("activates audio, loads stems with progress, and enables controls", async () => {
-    vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
-
-    const store = usePlayerStore();
-    await store.load(10);
-    await store.activateAndLoadAudio();
 
     const engine = engineMocks.instances[0];
-    expect(engine.initializeFromUserGesture).toHaveBeenCalledTimes(1);
+    expect(store.manifest).toEqual(manifest);
+    expect(store.mutedStems).toEqual({ 1: false, 2: false });
+    expect(store.stemGains).toEqual({ 1: 0, 2: 0 });
     expect(engine.loadManifest).toHaveBeenCalledWith(manifest, expect.any(Function));
+    expect(engine.initializeFromUserGesture).not.toHaveBeenCalled();
     expect(engine.setStemMuted).toHaveBeenCalledWith(1, false);
     expect(engine.setStemGain).toHaveBeenCalledWith(2, 0);
-    expect(engine.setFocus).toHaveBeenLastCalledWith({
-      stemId: null,
-      focusedGainDb: 0,
-      backgroundGainDb: -12,
-    });
     expect(store.loadProgressPercent).toBe(100);
     expect(store.controlsEnabled).toBe(true);
     store.reset();
   });
 
-  it("gates playback before audio has loaded", async () => {
+  it("keeps playback disabled while stems are loading", async () => {
     vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
+    const pendingLoad = deferred<void>();
+    engineMocks.behavior.loadPromise = pendingLoad.promise;
 
     const store = usePlayerStore();
-    await store.load(10);
-    store.play();
+    const loadPromise = store.load(10);
+    await vi.waitFor(() => expect(engineMocks.instances).toHaveLength(1));
 
-    expect(engineMocks.instances).toEqual([]);
-    expect(store.playbackState).toBe("stopped");
+    await store.play();
+
+    expect(store.controlsEnabled).toBe(false);
+    expect(engineMocks.instances[0].initializeFromUserGesture).not.toHaveBeenCalled();
+    pendingLoad.resolve();
+    await loadPromise;
+    store.reset();
   });
 
-  it("forwards playback, seek, focus, and mute commands to the engine", async () => {
+  it("starts the audio context before playback and forwards player controls", async () => {
     vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
 
     const store = usePlayerStore();
     await store.load(10);
-    await store.activateAndLoadAudio();
     const engine = engineMocks.instances[0];
 
-    store.play();
+    await store.play();
     store.seek(999);
     store.setStemMuted(2, true);
     store.setStemGain(2, -6);
     store.setFocusStem(1);
     store.setFocusGains(0, -18);
 
+    expect(engine.initializeFromUserGesture).toHaveBeenCalledTimes(1);
+    expect(engine.initializeFromUserGesture.mock.invocationCallOrder[0]).toBeLessThan(engine.play.mock.invocationCallOrder[0]);
     expect(engine.play).toHaveBeenCalledTimes(1);
     expect(engine.seek).toHaveBeenCalledWith(120);
     expect(engine.setStemMuted).toHaveBeenLastCalledWith(2, true);
@@ -162,12 +174,88 @@ describe("usePlayerStore", () => {
     store.reset();
   });
 
+  it("ignores repeated play clicks while the audio context is starting", async () => {
+    vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
+    const pendingStart = deferred<void>();
+    engineMocks.behavior.startPromise = pendingStart.promise;
+
+    const store = usePlayerStore();
+    await store.load(10);
+    const engine = engineMocks.instances[0];
+
+    const firstPlay = store.play();
+    const secondPlay = store.play();
+
+    expect(engine.initializeFromUserGesture).toHaveBeenCalledTimes(1);
+    expect(store.startingPlayback).toBe(true);
+    pendingStart.resolve();
+    await Promise.all([firstPlay, secondPlay]);
+    expect(engine.play).toHaveBeenCalledTimes(1);
+    store.reset();
+  });
+
+  it("reports audio context start errors without discarding loaded stems", async () => {
+    vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
+    engineMocks.behavior.startError = new Error("Audio context blocked");
+
+    const store = usePlayerStore();
+    await store.load(10);
+    const engine = engineMocks.instances[0];
+
+    await store.play();
+
+    expect(engine.play).not.toHaveBeenCalled();
+    expect(store.playbackError).toBe("Audio context blocked");
+    expect(store.controlsEnabled).toBe(true);
+    expect(store.playbackState).toBe("stopped");
+    store.reset();
+  });
+
+  it("retries a failed stem load with a fresh engine", async () => {
+    vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
+    engineMocks.behavior.loadError = new Error("Network error");
+
+    const store = usePlayerStore();
+    await store.load(10);
+
+    expect(store.loadError).toBe("Network error");
+    expect(store.controlsEnabled).toBe(false);
+    expect(engineMocks.instances[0].dispose).toHaveBeenCalledTimes(1);
+
+    engineMocks.behavior.loadError = null;
+    await store.retryAudioLoad();
+
+    expect(engineMocks.instances).toHaveLength(2);
+    expect(store.loadError).toBeNull();
+    expect(store.controlsEnabled).toBe(true);
+    store.reset();
+  });
+
+  it("ignores an audio load that finishes after the player was reset", async () => {
+    vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
+    const pendingLoad = deferred<void>();
+    engineMocks.behavior.loadPromise = pendingLoad.promise;
+
+    const store = usePlayerStore();
+    const loadPromise = store.load(10);
+    await vi.waitFor(() => expect(engineMocks.instances).toHaveLength(1));
+    const engine = engineMocks.instances[0];
+
+    store.reset();
+    pendingLoad.resolve();
+    await loadPromise;
+
+    expect(engine.dispose).toHaveBeenCalledTimes(1);
+    expect(store.manifest).toBeNull();
+    expect(store.audioLoaded).toBe(false);
+    expect(store.loadError).toBeNull();
+  });
+
   it("disposes audio resources on reset", async () => {
     vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
 
     const store = usePlayerStore();
     await store.load(10);
-    await store.activateAndLoadAudio();
     const engine = engineMocks.instances[0];
     store.reset();
 
@@ -176,3 +264,11 @@ describe("usePlayerStore", () => {
     expect(store.controlsEnabled).toBe(false);
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}

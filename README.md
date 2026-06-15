@@ -79,5 +79,6 @@ npm run build
 5. Conversion starten.
 6. Warten, bis die Stems den Status `ready` haben und der Song abspielbereit ist.
 7. Den Player oeffnen.
-8. `Audio aktivieren` klicken. Das ist fuer Safari/iOS und andere Browser mit User-Gesture-Regeln erforderlich.
-9. Nach vollstaendigem Laden Play, Pause, Stop, Seek, Mute und Fokus verwenden.
+8. Warten, bis alle Stems automatisch geladen und dekodiert wurden.
+9. `Play` klicken. Beim ersten Klick wird der Audio-Kontext direkt aus der Benutzerinteraktion gestartet.
+10. Danach Play, Pause, Stop, Seek, Mute und Fokus verwenden.

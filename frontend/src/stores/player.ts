@@ -16,15 +16,15 @@ const DEFAULT_BACKGROUND_GAIN_DB = -12;
 export const usePlayerStore = defineStore("player", () => {
   const manifest = ref<SongManifest | null>(null);
   const loadingManifest = ref(false);
-  const activatingAudio = ref(false);
   const loadingAudio = ref(false);
-  const audioEnabled = ref(false);
   const audioLoaded = ref(false);
+  const startingPlayback = ref(false);
   const playbackState = ref<PlaybackState>("stopped");
   const currentTimeSeconds = ref(0);
   const loadProgress = ref<Record<number, StemLoadProgress>>({});
   const error = ref<string | null>(null);
   const loadError = ref<string | null>(null);
+  const playbackError = ref<string | null>(null);
   const mutedStems = ref<Record<number, boolean>>({});
   const stemGains = ref<Record<number, number>>({});
   const focusedStemId = ref<number | null>(null);
@@ -32,11 +32,14 @@ export const usePlayerStore = defineStore("player", () => {
   const backgroundGainDb = ref(DEFAULT_BACKGROUND_GAIN_DB);
   const engine = shallowRef<AudioEngine | null>(null);
   let currentTimeTimer: number | null = null;
+  let pageLoadId = 0;
+  let audioLoadId = 0;
+  let playAttemptId = 0;
 
   const playableStems = computed(() => manifest.value?.stems.filter(isPlayableStem) ?? []);
   const durationSeconds = computed(() => Math.max(0, (manifest.value?.song.durationMs ?? 0) / 1000));
   const durationMs = computed(() => manifest.value?.song.durationMs ?? null);
-  const controlsEnabled = computed(() => audioEnabled.value && audioLoaded.value && !loadingAudio.value);
+  const controlsEnabled = computed(() => audioLoaded.value && !loadingAudio.value);
   const loadProgressPercent = computed(() => {
     if (playableStems.value.length === 0) {
       return 0;
@@ -48,60 +51,101 @@ export const usePlayerStore = defineStore("player", () => {
   });
 
   async function load(songId: number): Promise<void> {
+    const requestId = ++pageLoadId;
     resetAudio();
+    manifest.value = null;
     loadingManifest.value = true;
     error.value = null;
     loadError.value = null;
+    playbackError.value = null;
     try {
-      manifest.value = await manifestApi.getSongManifest(songId);
+      const nextManifest = await manifestApi.getSongManifest(songId);
+      if (requestId !== pageLoadId) {
+        return;
+      }
+      manifest.value = nextManifest;
       initializeStemControls();
     } catch (err) {
-      manifest.value = null;
-      error.value = getErrorMessage(err);
+      if (requestId === pageLoadId) {
+        manifest.value = null;
+        error.value = getErrorMessage(err);
+      }
     } finally {
-      loadingManifest.value = false;
+      if (requestId === pageLoadId) {
+        loadingManifest.value = false;
+      }
+    }
+
+    if (requestId === pageLoadId && manifest.value?.playable) {
+      await loadAudio();
     }
   }
 
-  async function activateAndLoadAudio(): Promise<void> {
+  async function loadAudio(): Promise<void> {
     if (!manifest.value || !manifest.value.playable || loadingAudio.value) {
       return;
     }
 
-    activatingAudio.value = true;
+    const requestId = ++audioLoadId;
+    const manifestToLoad = manifest.value;
     loadingAudio.value = true;
+    audioLoaded.value = false;
     loadError.value = null;
+    playbackError.value = null;
     loadProgress.value = {};
 
+    const nextEngine = new ToneAudioEngine();
+    engine.value?.dispose();
+    engine.value = nextEngine;
+
     try {
-      const nextEngine = new ToneAudioEngine();
-      engine.value?.dispose();
-      engine.value = nextEngine;
-      await nextEngine.initializeFromUserGesture();
-      audioEnabled.value = true;
-      await nextEngine.loadManifest(manifest.value, updateLoadProgress);
+      await nextEngine.loadManifest(manifestToLoad, (progress) => updateLoadProgress(requestId, progress));
+      if (requestId !== audioLoadId || engine.value !== nextEngine) {
+        return;
+      }
       applyAllEngineControls();
       audioLoaded.value = true;
-      startCurrentTimeTimer();
     } catch (err) {
-      audioLoaded.value = false;
-      audioEnabled.value = false;
-      engine.value?.dispose();
-      engine.value = null;
-      loadError.value = getErrorMessage(err);
+      if (requestId === audioLoadId && engine.value === nextEngine) {
+        audioLoaded.value = false;
+        nextEngine.dispose();
+        engine.value = null;
+        loadError.value = getErrorMessage(err);
+      }
     } finally {
-      activatingAudio.value = false;
-      loadingAudio.value = false;
+      if (requestId === audioLoadId) {
+        loadingAudio.value = false;
+      }
     }
   }
 
-  function play(): void {
-    if (!controlsEnabled.value) {
+  async function play(): Promise<void> {
+    if (!controlsEnabled.value || startingPlayback.value || !engine.value) {
       return;
     }
-    engine.value?.play();
-    playbackState.value = "playing";
-    startCurrentTimeTimer();
+
+    const requestId = ++playAttemptId;
+    const currentEngine = engine.value;
+    startingPlayback.value = true;
+    playbackError.value = null;
+
+    try {
+      await currentEngine.initializeFromUserGesture();
+      if (requestId !== playAttemptId || engine.value !== currentEngine || !controlsEnabled.value) {
+        return;
+      }
+      currentEngine.play();
+      playbackState.value = "playing";
+      startCurrentTimeTimer();
+    } catch (err) {
+      if (requestId === playAttemptId && engine.value === currentEngine) {
+        playbackError.value = getErrorMessage(err);
+      }
+    } finally {
+      if (requestId === playAttemptId) {
+        startingPlayback.value = false;
+      }
+    }
   }
 
   function pause(): void {
@@ -150,21 +194,25 @@ export const usePlayerStore = defineStore("player", () => {
   }
 
   function reset(): void {
+    pageLoadId += 1;
     stopCurrentTimeTimer();
     resetAudio();
     manifest.value = null;
     loadingManifest.value = false;
     error.value = null;
     loadError.value = null;
+    playbackError.value = null;
   }
 
   function resetAudio(): void {
+    audioLoadId += 1;
+    playAttemptId += 1;
+    stopCurrentTimeTimer();
     engine.value?.dispose();
     engine.value = null;
-    audioEnabled.value = false;
     audioLoaded.value = false;
-    activatingAudio.value = false;
     loadingAudio.value = false;
+    startingPlayback.value = false;
     playbackState.value = "stopped";
     currentTimeSeconds.value = 0;
     loadProgress.value = {};
@@ -175,7 +223,10 @@ export const usePlayerStore = defineStore("player", () => {
     backgroundGainDb.value = DEFAULT_BACKGROUND_GAIN_DB;
   }
 
-  function updateLoadProgress(progress: StemLoadProgress): void {
+  function updateLoadProgress(requestId: number, progress: StemLoadProgress): void {
+    if (requestId !== audioLoadId) {
+      return;
+    }
     loadProgress.value = {
       ...loadProgress.value,
       [progress.stemId]: progress,
@@ -246,10 +297,9 @@ export const usePlayerStore = defineStore("player", () => {
   return {
     manifest,
     loadingManifest,
-    activatingAudio,
     loadingAudio,
-    audioEnabled,
     audioLoaded,
+    startingPlayback,
     playbackState,
     currentTimeSeconds,
     durationSeconds,
@@ -258,6 +308,7 @@ export const usePlayerStore = defineStore("player", () => {
     loadProgressPercent,
     error,
     loadError,
+    playbackError,
     mutedStems,
     stemGains,
     focusedStemId,
@@ -266,7 +317,7 @@ export const usePlayerStore = defineStore("player", () => {
     playableStems,
     controlsEnabled,
     load,
-    activateAndLoadAudio,
+    retryAudioLoad: loadAudio,
     play,
     pause,
     stop,

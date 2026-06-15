@@ -1,15 +1,21 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia } from "pinia";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as manifestApi from "@/api/manifest";
 import type { SongManifest } from "@/types/manifest";
 import PlayerView from "@/views/PlayerView.vue";
 
-const engineMocks = vi.hoisted(() => ({
-  ToneAudioEngine: vi.fn(() => ({
+const engineMocks = vi.hoisted(() => {
+  const behavior = { loadError: null as Error | null };
+  const ToneAudioEngine = vi.fn(() => ({
     initializeFromUserGesture: vi.fn().mockResolvedValue(undefined),
-    loadManifest: vi.fn(() => new Promise(() => undefined)),
+    loadManifest: vi.fn(() => {
+      if (behavior.loadError) {
+        return Promise.reject(behavior.loadError);
+      }
+      return new Promise(() => undefined);
+    }),
     play: vi.fn(),
     pause: vi.fn(),
     stop: vi.fn(),
@@ -20,8 +26,9 @@ const engineMocks = vi.hoisted(() => ({
     getCurrentTime: vi.fn(() => 0),
     getDuration: vi.fn(() => 120),
     dispose: vi.fn(),
-  })),
-}));
+  }));
+  return { behavior, ToneAudioEngine };
+});
 
 vi.mock("@/api/manifest", () => ({
   getSongManifest: vi.fn(),
@@ -60,7 +67,12 @@ const manifest: SongManifest = {
 };
 
 describe("PlayerView", () => {
-  it("keeps playback, mixer, and focus controls disabled before audio load completes", async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    engineMocks.behavior.loadError = null;
+  });
+
+  it("loads stems automatically and keeps controls disabled until loading completes", async () => {
     vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
 
     const wrapper = mount(PlayerView, {
@@ -77,7 +89,9 @@ describe("PlayerView", () => {
 
     await flushPromises();
 
-    expect(buttonByText(wrapper, "Audio aktivieren").attributes("disabled")).toBeUndefined();
+    expect(wrapper.text()).not.toContain("Audio aktivieren");
+    expect(wrapper.text()).toContain("Stems laden");
+    expect(engineMocks.ToneAudioEngine).toHaveBeenCalledTimes(1);
     expect(buttonByText(wrapper, "Play").attributes("disabled")).toBeDefined();
     expect(buttonByText(wrapper, "Pause").attributes("disabled")).toBeDefined();
     expect(buttonByText(wrapper, "Stop").attributes("disabled")).toBeDefined();
@@ -85,14 +99,40 @@ describe("PlayerView", () => {
     expect(wrapper.find(".mixer-row input[type='checkbox']").attributes("disabled")).toBeDefined();
     expect(wrapper.find(".focus-controls select").attributes("disabled")).toBeDefined();
 
-    await buttonByText(wrapper, "Audio aktivieren").trigger("click");
+    expect(engineMocks.ToneAudioEngine.mock.results[0].value.initializeFromUserGesture).not.toHaveBeenCalled();
+  });
+
+  it("offers a retry after a stem load error", async () => {
+    vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
+    engineMocks.behavior.loadError = new Error("Network error");
+
+    const wrapper = mountPlayerView();
     await flushPromises();
 
-    expect(buttonByText(wrapper, "Play").attributes("disabled")).toBeDefined();
-    expect(buttonByText(wrapper, "Pause").attributes("disabled")).toBeDefined();
-    expect(buttonByText(wrapper, "Stop").attributes("disabled")).toBeDefined();
+    expect(wrapper.text()).toContain("Network error");
+    const retryButton = buttonByText(wrapper, "Stems erneut laden");
+
+    engineMocks.behavior.loadError = null;
+    await retryButton.trigger("click");
+    await flushPromises();
+
+    expect(engineMocks.ToneAudioEngine).toHaveBeenCalledTimes(2);
   });
 });
+
+function mountPlayerView() {
+  return mount(PlayerView, {
+    props: { id: "10" },
+    global: {
+      plugins: [createPinia()],
+      stubs: {
+        RouterLink: {
+          template: "<a><slot /></a>",
+        },
+      },
+    },
+  });
+}
 
 function buttonByText(wrapper: ReturnType<typeof mount>, text: string) {
   const button = wrapper.findAll("button").find((candidate) => candidate.text() === text);

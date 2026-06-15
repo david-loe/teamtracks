@@ -56,7 +56,13 @@ function seek(event: Event): void {
     </div>
 
     <p v-if="playerStore.error" class="error-text">{{ playerStore.error }}</p>
-    <p v-if="playerStore.loadError" class="error-text">{{ playerStore.loadError }}</p>
+    <div v-if="playerStore.loadError" class="activation-row">
+      <p class="error-text">{{ playerStore.loadError }}</p>
+      <button class="button button-secondary" type="button" :disabled="playerStore.loadingAudio" @click="playerStore.retryAudioLoad">
+        Stems erneut laden
+      </button>
+    </div>
+    <p v-if="playerStore.playbackError" class="error-text">{{ playerStore.playbackError }}</p>
 
     <section class="panel player-panel">
       <p v-if="playerStore.loadingManifest" class="muted">Manifest wird geladen...</p>
@@ -78,17 +84,6 @@ function seek(event: Event): void {
         </div>
 
         <template v-else>
-          <div v-if="!playerStore.audioLoaded" class="activation-row">
-            <button
-              class="button button-primary"
-              type="button"
-              :disabled="playerStore.activatingAudio || playerStore.loadingAudio"
-              @click="playerStore.activateAndLoadAudio"
-            >
-              {{ playerStore.loadingAudio ? "Audio wird geladen..." : "Audio aktivieren" }}
-            </button>
-          </div>
-
           <LoadingProgress
             v-if="playerStore.loadingAudio || playerStore.loadProgressPercent > 0"
             :stems="playerStore.playableStems"
@@ -101,10 +96,10 @@ function seek(event: Event): void {
               <button
                 class="button button-primary"
                 type="button"
-                :disabled="!playerStore.controlsEnabled || playerStore.playbackState === 'playing'"
+                :disabled="!playerStore.controlsEnabled || playerStore.startingPlayback || playerStore.playbackState === 'playing'"
                 @click="playerStore.play"
               >
-                Play
+                {{ playerStore.startingPlayback ? "Audio wird gestartet..." : "Play" }}
               </button>
               <button
                 class="button button-secondary"
