@@ -9,7 +9,6 @@ class Settings(BaseSettings):
     app_name: str = "TeamTracks"
     database_url: str = Field(default="sqlite:////data/db/teamtracks.db", validation_alias="DATABASE_URL")
     storage_root: Path = Field(default=Path("/data/storage"), validation_alias="STORAGE_ROOT")
-    source_root: Path = Field(default=Path("/data/imports"), validation_alias="SOURCE_ROOT")
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
     admin_password: SecretStr = Field(default=SecretStr("change-me"), validation_alias="ADMIN_PASSWORD")
     admin_session_secret: SecretStr = Field(

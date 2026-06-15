@@ -11,7 +11,6 @@ import { useAdminStemsStore } from "@/stores/adminStems";
 vi.mock("@/api/stems", () => ({
   listStems: vi.fn(),
   uploadStem: vi.fn(),
-  importStem: vi.fn(),
   deleteStem: vi.fn(),
 }));
 

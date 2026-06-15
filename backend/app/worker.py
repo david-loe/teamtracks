@@ -42,7 +42,7 @@ def process_next_job(conversion_service: ConversionService) -> bool:
 def run() -> None:
     stopping = False
     settings = get_settings()
-    storage = StorageService(settings.storage_root, settings.source_root)
+    storage = StorageService(settings.storage_root)
     conversion_service = ConversionService(storage)
 
     def request_stop(signum: int, _frame: object) -> None:

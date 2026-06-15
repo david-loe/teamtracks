@@ -1,4 +1,4 @@
-import { apiJson, apiRequest } from "./client";
+import { apiRequest } from "./client";
 
 export type StemRole = "drums" | "bass" | "vocals" | "guitar" | "keys" | "click_cue" | "other";
 export type StemStatus = "uploaded" | "converting" | "ready" | "error";
@@ -25,13 +25,6 @@ export interface Stem {
   updatedAt: string;
 }
 
-export interface StemImportInput {
-  sourcePath: string;
-  name: string;
-  role: StemRole;
-  key?: number | null;
-}
-
 export interface StemUploadInput {
   name: string;
   role: StemRole;
@@ -56,10 +49,6 @@ export function uploadStem(songId: number, input: StemUploadInput): Promise<Stem
     method: "POST",
     body: formData,
   });
-}
-
-export function importStem(songId: number, input: StemImportInput): Promise<Stem> {
-  return apiJson<Stem>(`/api/admin/songs/${songId}/stems/import`, input);
 }
 
 export function deleteStem(stemId: number): Promise<void> {

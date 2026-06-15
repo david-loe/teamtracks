@@ -9,7 +9,6 @@ services:
     volumes:
       - db_data:/data/db
       - media_storage:/data/storage
-      - source_imports:/data/imports
 
   backend:
     build:
@@ -25,7 +24,6 @@ services:
     volumes:
       - db_data:/data/db
       - media_storage:/data/storage
-      - source_imports:/data/imports
 
   worker:
     build:
@@ -42,7 +40,6 @@ services:
     volumes:
       - db_data:/data/db
       - media_storage:/data/storage
-      - source_imports:/data/imports
 
   backend-test:
     profiles: ["test"]
@@ -55,7 +52,6 @@ services:
     environment:
       DATABASE_URL: sqlite:////tmp/teamtracks-test.db
       STORAGE_ROOT: /tmp/teamtracks-storage
-      SOURCE_ROOT: /tmp/teamtracks-imports
       ADMIN_PASSWORD: test-password
       ADMIN_SESSION_SECRET: test-session-secret
 
@@ -84,5 +80,4 @@ services:
 volumes:
   db_data:
   media_storage:
-  source_imports:
   frontend_node_modules:

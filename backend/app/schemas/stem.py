@@ -5,15 +5,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.domain import StemRole, StemStatus
 
 
-class StemImport(BaseModel):
-    source_path: str = Field(alias="sourcePath")
-    name: str = Field(min_length=1, max_length=200)
-    role: StemRole
-    key: int | None = Field(default=None, ge=0, le=11)
-
-    model_config = ConfigDict(populate_by_name=True)
-
-
 class StemRead(BaseModel):
     id: int
     song_id: int = Field(alias="songId")

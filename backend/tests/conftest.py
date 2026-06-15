@@ -23,9 +23,8 @@ def client(tmp_path: Path) -> Generator[TestClient, None, None]:
     TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False, future=True)
     Base.metadata.create_all(bind=engine)
 
-    storage = StorageService(storage_root=tmp_path / "storage", source_root=tmp_path / "imports")
+    storage = StorageService(storage_root=tmp_path / "storage")
     storage.storage_root.mkdir(parents=True)
-    storage.source_root.mkdir(parents=True)
 
     def override_get_db() -> Generator[Session, None, None]:
         db = TestingSessionLocal()

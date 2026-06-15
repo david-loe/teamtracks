@@ -3,7 +3,6 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 
 import ConversionStatus from "@/components/ConversionStatus.vue";
-import StemImport from "@/components/StemImport.vue";
 import StemUpload from "@/components/StemUpload.vue";
 import type { StemKeyAssetVariant } from "@/api/transposition";
 import { useAdminStemsStore } from "@/stores/adminStems";
@@ -63,10 +62,6 @@ async function uploadStem(payload: Parameters<typeof stemsStore.upload>[1]): Pro
   await stemsStore.upload(songId.value, payload);
 }
 
-async function importStem(payload: Parameters<typeof stemsStore.importFromSource>[1]): Promise<void> {
-  await stemsStore.importFromSource(songId.value, payload);
-}
-
 async function deleteStem(stemId: number): Promise<void> {
   if (!window.confirm("Stem inklusive Quelldatei und konvertierter Datei löschen?")) {
     return;
@@ -111,7 +106,7 @@ function variantsForStem(stemId: number): StemKeyAssetVariant[] {
         <h1>{{ songsStore.currentSong?.title ?? "Stem-Verwaltung" }}</h1>
         <p class="muted">
           {{ songsStore.currentSong?.artist || "Unbekannter Künstler" }} ·
-          WAV-Stems hochladen oder importieren und Conversion-Jobs starten.
+          WAV-Stems hochladen und Conversion-Jobs starten.
           Originaltonart: {{ formatSongKey(songsStore.currentSong?.originalKey) }}
         </p>
       </div>
@@ -145,11 +140,6 @@ function variantsForStem(stemId: number): StemKeyAssetVariant[] {
       <section class="panel">
         <h2>Upload</h2>
         <StemUpload :disabled="stemsStore.uploading" @submit="uploadStem" />
-      </section>
-
-      <section class="panel">
-        <h2>Import aus SOURCE_ROOT</h2>
-        <StemImport :disabled="stemsStore.importing" @submit="importStem" />
       </section>
     </div>
 

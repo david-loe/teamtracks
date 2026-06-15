@@ -1,6 +1,6 @@
 # TeamTracks
 
-TeamTracks ist eine Webapp zum synchronen Abspielen mehrerer konvertierter Audio-Stems im Browser. Das Backend verwaltet Songs, WAV-Uploads, WAV-Imports, Conversion-Jobs, Manifest-Erzeugung und Media-Serving. Das Frontend bietet Admin-Workflows und einen Player mit Mute, Seek und Fokusmodus.
+TeamTracks ist eine Webapp zum synchronen Abspielen mehrerer konvertierter Audio-Stems im Browser. Das Backend verwaltet Songs, WAV-Uploads, Conversion-Jobs, Manifest-Erzeugung und Media-Serving. Das Frontend bietet Admin-Workflows und einen Player mit Mute, Seek und Fokusmodus.
 
 ## Start mit Docker Compose
 
@@ -31,7 +31,6 @@ Persistente Daten liegen in Docker-Volumes:
 
 - `db_data`: SQLite-Datenbank
 - `media_storage`: hochgeladene WAVs und konvertierte M4A-Dateien
-- `source_imports`: optionaler Import-Ort fuer lokale WAV-Quellen
 
 Zum Beenden:
 

@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 
 import type { ConversionJob } from "@/api/conversion";
 import * as conversionApi from "@/api/conversion";
-import type { Stem, StemImportInput, StemUploadInput } from "@/api/stems";
+import type { Stem, StemUploadInput } from "@/api/stems";
 import * as stemsApi from "@/api/stems";
 import type { StemKeyAssetInventoryItem } from "@/api/transposition";
 import * as transpositionApi from "@/api/transposition";
@@ -19,7 +19,6 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
   const loadingJobs = ref(false);
   const loadingKeyAssets = ref(false);
   const uploading = ref(false);
-  const importing = ref(false);
   const deletingId = ref<number | null>(null);
   const startingConversion = ref(false);
   const transposing = ref(false);
@@ -90,21 +89,6 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
       return false;
     } finally {
       uploading.value = false;
-    }
-  }
-
-  async function importFromSource(songId: number, input: StemImportInput): Promise<boolean> {
-    importing.value = true;
-    error.value = null;
-    try {
-      const stem = await stemsApi.importStem(songId, input);
-      stems.value = [...stems.value, stem];
-      return true;
-    } catch (err) {
-      error.value = getErrorMessage(err);
-      return false;
-    } finally {
-      importing.value = false;
     }
   }
 
@@ -239,7 +223,6 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     loadingJobs,
     loadingKeyAssets,
     uploading,
-    importing,
     deletingId,
     startingConversion,
     transposing,
@@ -254,7 +237,6 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     loadJobs,
     loadKeyAssets,
     upload,
-    importFromSource,
     removeStem,
     startConversion,
     reconvert,
