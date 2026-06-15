@@ -112,6 +112,41 @@ describe("useAdminStemsStore", () => {
     expect(store.stems).toEqual([readyStem, uploadedStem]);
   });
 
+  it("uploads batches sequentially and continues after a failure", async () => {
+    let resolveFirst: ((stem: Stem) => void) | undefined;
+    const firstUpload = new Promise<Stem>((resolve) => {
+      resolveFirst = resolve;
+    });
+    vi.mocked(stemsApi.uploadStem)
+      .mockReturnValueOnce(firstUpload)
+      .mockRejectedValueOnce(new Error("Second upload failed"))
+      .mockResolvedValueOnce(readyStem);
+
+    const inputs = [
+      { name: "Drums", role: "drums" as const, key: null, file: new File(["one"], "drums.wav") },
+      { name: "Vocals", role: "vocals" as const, key: 0, file: new File(["two"], "vocals.wav") },
+      { name: "Bass", role: "bass" as const, key: 0, file: new File(["three"], "bass.wav") },
+    ];
+    const store = useAdminStemsStore();
+    const resultPromise = store.uploadMany(10, inputs);
+
+    expect(store.uploading).toBe(true);
+    expect(stemsApi.uploadStem).toHaveBeenCalledTimes(1);
+
+    resolveFirst?.(uploadedStem);
+    const results = await resultPromise;
+
+    expect(stemsApi.uploadStem).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(stemsApi.uploadStem).mock.calls.map((call) => call[1])).toEqual(inputs);
+    expect(results).toEqual([
+      { input: inputs[0], stem: uploadedStem, error: null },
+      { input: inputs[1], stem: null, error: "Second upload failed" },
+      { input: inputs[2], stem: readyStem, error: null },
+    ]);
+    expect(store.stems).toEqual([uploadedStem, readyStem]);
+    expect(store.uploading).toBe(false);
+  });
+
   it("starts conversion and reloads stems and jobs", async () => {
     vi.mocked(conversionApi.createConversionJobs).mockResolvedValue({ jobIds: [99], status: "queued" });
     vi.mocked(stemsApi.listStems).mockResolvedValue([uploadedStem]);

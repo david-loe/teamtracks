@@ -205,6 +205,33 @@ h2 {
   font-weight: 650;
 }
 
+.upload-queue {
+  display: grid;
+  gap: 12px;
+}
+
+.upload-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 2fr) minmax(110px, 1fr) minmax(140px, 1fr);
+  gap: 10px;
+  border: 1px solid #e5e9f0;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.upload-row-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.upload-row-message {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 input,
 select,
 textarea {
@@ -497,6 +524,10 @@ textarea:focus {
   }
 
   .layout-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .upload-row {
     grid-template-columns: 1fr;
   }
 

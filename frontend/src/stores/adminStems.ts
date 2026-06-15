@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 
 import type { ConversionJob } from "@/api/conversion";
 import * as conversionApi from "@/api/conversion";
-import type { Stem, StemUploadInput } from "@/api/stems";
+import type { Stem, StemUploadInput, StemUploadResult } from "@/api/stems";
 import * as stemsApi from "@/api/stems";
 import type { StemKeyAssetInventoryItem } from "@/api/transposition";
 import * as transpositionApi from "@/api/transposition";
@@ -87,6 +87,26 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     } catch (err) {
       error.value = getErrorMessage(err);
       return false;
+    } finally {
+      uploading.value = false;
+    }
+  }
+
+  async function uploadMany(songId: number, inputs: StemUploadInput[]): Promise<StemUploadResult[]> {
+    uploading.value = true;
+    error.value = null;
+    const results: StemUploadResult[] = [];
+    try {
+      for (const input of inputs) {
+        try {
+          const stem = await stemsApi.uploadStem(songId, input);
+          stems.value = [...stems.value, stem];
+          results.push({ input, stem, error: null });
+        } catch (err) {
+          results.push({ input, stem: null, error: getErrorMessage(err) });
+        }
+      }
+      return results;
     } finally {
       uploading.value = false;
     }
@@ -237,6 +257,7 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     loadJobs,
     loadKeyAssets,
     upload,
+    uploadMany,
     removeStem,
     startConversion,
     reconvert,

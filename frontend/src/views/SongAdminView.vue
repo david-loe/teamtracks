@@ -58,8 +58,8 @@ async function loadPage(): Promise<void> {
   ]);
 }
 
-async function uploadStem(payload: Parameters<typeof stemsStore.upload>[1]): Promise<void> {
-  await stemsStore.upload(songId.value, payload);
+async function uploadStems(payload: Parameters<typeof stemsStore.uploadMany>[1]) {
+  return stemsStore.uploadMany(songId.value, payload);
 }
 
 async function deleteStem(stemId: number): Promise<void> {
@@ -139,7 +139,13 @@ function variantsForStem(stemId: number): StemKeyAssetVariant[] {
 
       <section class="panel">
         <h2>Upload</h2>
-        <StemUpload :disabled="stemsStore.uploading" @submit="uploadStem" />
+        <StemUpload
+          v-if="songsStore.currentSong"
+          :disabled="stemsStore.uploading"
+          :original-key="songsStore.currentSong.originalKey"
+          :upload="uploadStems"
+        />
+        <p v-else class="muted">Songdaten werden geladen...</p>
       </section>
     </div>
 

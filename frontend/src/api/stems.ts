@@ -32,6 +32,10 @@ export interface StemUploadInput {
   file: File;
 }
 
+export type StemUploadResult =
+  | { input: StemUploadInput; stem: Stem; error: null }
+  | { input: StemUploadInput; stem: null; error: string };
+
 export function listStems(songId: number): Promise<Stem[]> {
   return apiRequest<Stem[]>(`/api/admin/songs/${songId}/stems`);
 }
