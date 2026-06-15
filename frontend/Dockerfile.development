@@ -1,8 +1,8 @@
-FROM node:24.14-alpine
+FROM node:24.16-alpine
 
 WORKDIR /npm_cache
 COPY frontend/package*.json ./
-RUN npm install
+RUN npm ci
 RUN chown -R node:node /npm_cache
 
 WORKDIR /app

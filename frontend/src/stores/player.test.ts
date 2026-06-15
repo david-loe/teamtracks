@@ -13,7 +13,7 @@ const engineMocks = vi.hoisted(() => {
     startError: null as Error | null,
   };
   const instances: any[] = [];
-  const ToneAudioEngine = vi.fn(() => {
+  const ToneAudioEngine = vi.fn(function ToneAudioEngine() {
     const engine = {
       initializeFromUserGesture: vi.fn(async () => {
         await behavior.startPromise;

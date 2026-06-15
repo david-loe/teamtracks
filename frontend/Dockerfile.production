@@ -1,4 +1,4 @@
-FROM node:24.14-alpine
+FROM node:24.16-alpine
 
 RUN apk add nginx
 
@@ -9,7 +9,7 @@ WORKDIR /app
 ENV HOME=/home/node
 
 COPY frontend/package*.json ./
-RUN npm install
+RUN npm ci
 
 COPY frontend/ .
 

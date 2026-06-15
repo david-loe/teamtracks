@@ -8,25 +8,27 @@ import PlayerView from "@/views/PlayerView.vue";
 
 const engineMocks = vi.hoisted(() => {
   const behavior = { loadError: null as Error | null };
-  const ToneAudioEngine = vi.fn(() => ({
-    initializeFromUserGesture: vi.fn().mockResolvedValue(undefined),
-    loadManifest: vi.fn(() => {
-      if (behavior.loadError) {
-        return Promise.reject(behavior.loadError);
-      }
-      return new Promise(() => undefined);
-    }),
-    play: vi.fn(),
-    pause: vi.fn(),
-    stop: vi.fn(),
-    seek: vi.fn(),
-    setStemMuted: vi.fn(),
-    setStemGain: vi.fn(),
-    setFocus: vi.fn(),
-    getCurrentTime: vi.fn(() => 0),
-    getDuration: vi.fn(() => 120),
-    dispose: vi.fn(),
-  }));
+  const ToneAudioEngine = vi.fn(function ToneAudioEngine() {
+    return {
+      initializeFromUserGesture: vi.fn().mockResolvedValue(undefined),
+      loadManifest: vi.fn(() => {
+        if (behavior.loadError) {
+          return Promise.reject(behavior.loadError);
+        }
+        return new Promise(() => undefined);
+      }),
+      play: vi.fn(),
+      pause: vi.fn(),
+      stop: vi.fn(),
+      seek: vi.fn(),
+      setStemMuted: vi.fn(),
+      setStemGain: vi.fn(),
+      setFocus: vi.fn(),
+      getCurrentTime: vi.fn(() => 0),
+      getDuration: vi.fn(() => 120),
+      dispose: vi.fn(),
+    };
+  });
   return { behavior, ToneAudioEngine };
 });
 

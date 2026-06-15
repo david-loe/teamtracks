@@ -11,7 +11,7 @@ const toneMocks = vi.hoisted(() => ({
   start: vi.fn().mockResolvedValue(undefined),
   now: vi.fn(() => toneMocks.currentTime),
   getContext: vi.fn(() => ({ decodeAudioData: toneMocks.decodeAudioData })),
-  Player: vi.fn((audioBuffer) => {
+  Player: vi.fn(function Player(audioBuffer) {
     const player = {
       audioBuffer,
       connect: vi.fn(),
@@ -22,7 +22,7 @@ const toneMocks = vi.hoisted(() => ({
     toneMocks.players.push(player);
     return player;
   }),
-  Gain: vi.fn((initialGain) => {
+  Gain: vi.fn(function Gain(initialGain) {
     const gain = {
       gain: { value: initialGain },
       toDestination: vi.fn(function toDestination() {
