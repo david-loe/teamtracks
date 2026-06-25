@@ -5,6 +5,8 @@ import type { SongListItem } from "@/api/songs";
 import { listPublicSongs } from "@/api/songs";
 import { formatDuration } from "@/types/format";
 
+const props = defineProps<{ organizationId: string }>();
+const organizationId = Number(props.organizationId);
 const songs = ref<SongListItem[]>([]);
 const query = ref("");
 const loading = ref(false);
@@ -14,7 +16,7 @@ onMounted(() => void search());
 async function search(): Promise<void> {
   loading.value = true;
   error.value = null;
-  try { songs.value = await listPublicSongs(query.value); }
+  try { songs.value = await listPublicSongs(organizationId, query.value); }
   catch (err) { error.value = err instanceof Error ? err.message : "Songs konnten nicht geladen werden."; }
   finally { loading.value = false; }
 }
@@ -29,7 +31,7 @@ async function search(): Promise<void> {
       <p v-if="loading" class="muted">Songs werden geladen...</p>
       <p v-else-if="songs.length === 0" class="muted">Keine abspielbereiten Songs gefunden.</p>
       <div v-else class="public-song-list section-block">
-        <RouterLink v-for="song in songs" :key="song.id" class="song-card" :to="`/songs/${song.id}`">
+        <RouterLink v-for="song in songs" :key="song.id" class="song-card" :to="`/org/${organizationId}/songs/${song.id}`">
           <div><strong>{{ song.title }}</strong><span class="table-subtext">{{ song.artist || "Unbekannter Künstler" }} · {{ song.slug }}</span></div>
           <span>{{ formatDuration(song.durationMs) }}</span>
         </RouterLink>

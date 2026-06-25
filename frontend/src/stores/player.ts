@@ -30,6 +30,7 @@ export const usePlayerStore = defineStore("player", () => {
   const error = ref<string | null>(null);
   const loadError = ref<string | null>(null);
   const playbackError = ref<string | null>(null);
+  const accessErrorStatus = ref<number | null>(null);
   const mutedStems = ref<Record<number, boolean>>({});
   const stemGains = ref<Record<number, number>>({});
   const focusedStemId = ref<number | null>(null);
@@ -78,7 +79,7 @@ export const usePlayerStore = defineStore("player", () => {
     return loadProgressPercent.value < 100 ? "downloading" : "decoding";
   });
 
-  async function load(songId: number, key: number | null = null): Promise<void> {
+  async function load(organizationId: number, songId: number, key: number | null = null): Promise<void> {
     const requestId = ++pageLoadId;
     resetAudio();
     manifest.value = null;
@@ -86,13 +87,14 @@ export const usePlayerStore = defineStore("player", () => {
     error.value = null;
     loadError.value = null;
     playbackError.value = null;
+    accessErrorStatus.value = null;
     try {
-      const nextManifest = await manifestApi.getSongManifest(songId, key);
+      const nextManifest = await manifestApi.getSongManifest(organizationId, songId, key);
       if (requestId !== pageLoadId) {
         return;
       }
       manifest.value = nextManifest;
-      const userSettings = await loadUserSettings();
+      const userSettings = await loadUserSettings(organizationId);
       if (requestId !== pageLoadId) {
         return;
       }
@@ -110,6 +112,7 @@ export const usePlayerStore = defineStore("player", () => {
     } catch (err) {
       if (requestId === pageLoadId) {
         manifest.value = null;
+        accessErrorStatus.value = getAccessErrorStatus(err);
         error.value = getErrorMessage(err);
       }
     } finally {
@@ -152,6 +155,7 @@ export const usePlayerStore = defineStore("player", () => {
         audioLoaded.value = false;
         nextEngine.dispose();
         engine.value = null;
+        accessErrorStatus.value = getAccessErrorStatus(err);
         loadError.value = getErrorMessage(err);
       }
     } finally {
@@ -170,6 +174,7 @@ export const usePlayerStore = defineStore("player", () => {
     const currentEngine = engine.value;
     startingPlayback.value = true;
     playbackError.value = null;
+    accessErrorStatus.value = null;
 
     try {
       await currentEngine.initializeFromUserGesture();
@@ -337,9 +342,9 @@ export const usePlayerStore = defineStore("player", () => {
     return Math.min(Math.max(0, safePosition), durationSeconds.value);
   }
 
-  async function loadUserSettings() {
+  async function loadUserSettings(organizationId: number) {
     try {
-      return await getUserPlayerSettings();
+      return await getUserPlayerSettings(organizationId);
     } catch {
       return null;
     }
@@ -361,6 +366,7 @@ export const usePlayerStore = defineStore("player", () => {
     error,
     loadError,
     playbackError,
+    accessErrorStatus,
     mutedStems,
     stemGains,
     focusedStemId,
@@ -390,6 +396,12 @@ export const usePlayerStore = defineStore("player", () => {
 
 function getErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "Unbekannter Fehler";
+}
+
+function getAccessErrorStatus(err: unknown): number | null {
+  if (typeof err !== "object" || err === null || !("status" in err)) return null;
+  const status = (err as { status?: unknown }).status;
+  return status === 401 || status === 403 ? status : null;
 }
 
 function clampGain(value: number, minimum: number, maximum: number): number {

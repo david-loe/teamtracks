@@ -2,10 +2,10 @@ from fastapi.testclient import TestClient
 
 
 def test_song_crud(client: TestClient) -> None:
-    assert client.get("/api/songs").json() == []
+    assert client.get(f"/api/organizations/{client.organization_id}/admin/songs").json() == []
 
     create_response = client.post(
-        "/api/songs",
+        f"/api/organizations/{client.organization_id}/admin/songs",
         json={"title": "Demo Song", "artist": "Demo Artist", "slug": "demo-song", "description": "Internal test song"},
     )
     assert create_response.status_code == 201
@@ -16,10 +16,10 @@ def test_song_crud(client: TestClient) -> None:
     assert song["status"] == "draft"
     assert song["originalKey"] == 0
 
-    duplicate_response = client.post("/api/songs", json={"title": "Duplicate", "slug": "demo-song"})
+    duplicate_response = client.post(f"/api/organizations/{client.organization_id}/admin/songs", json={"title": "Duplicate", "slug": "demo-song"})
     assert duplicate_response.status_code == 409
 
-    list_response = client.get("/api/songs")
+    list_response = client.get(f"/api/organizations/{client.organization_id}/admin/songs")
     assert list_response.status_code == 200
     assert list_response.json() == [
         {
@@ -35,12 +35,12 @@ def test_song_crud(client: TestClient) -> None:
         }
     ]
 
-    detail_response = client.get(f"/api/songs/{song['id']}")
+    detail_response = client.get(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}")
     assert detail_response.status_code == 200
     assert detail_response.json()["description"] == "Internal test song"
 
     update_response = client.patch(
-        f"/api/admin/songs/{song['id']}",
+        f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}",
         json={"title": "Renamed Song", "artist": "Renamed Artist", "originalKey": 5},
     )
     assert update_response.status_code == 200
@@ -49,6 +49,6 @@ def test_song_crud(client: TestClient) -> None:
     assert updated["artist"] == "Renamed Artist"
     assert updated["originalKey"] == 5
 
-    delete_response = client.delete(f"/api/songs/{song['id']}")
+    delete_response = client.delete(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}")
     assert delete_response.status_code == 204
-    assert client.get(f"/api/songs/{song['id']}").status_code == 404
+    assert client.get(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}").status_code == 404

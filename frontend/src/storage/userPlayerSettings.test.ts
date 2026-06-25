@@ -19,12 +19,14 @@ describe("userPlayerSettings storage", () => {
       value: fake.factory,
     });
 
-    expect(await getUserPlayerSettings()).toBeNull();
+    expect(await getUserPlayerSettings(7)).toBeNull();
 
-    await saveUserPlayerSettings({ focusedGainDb: 3, backgroundGainDb: -20 });
+    await saveUserPlayerSettings(7, { focusedGainDb: 3, backgroundGainDb: -20 });
+    await saveUserPlayerSettings(8, { focusedGainDb: -2, backgroundGainDb: -10 });
 
-    expect(await getUserPlayerSettings()).toEqual({ focusedGainDb: 3, backgroundGainDb: -20 });
-    expect(fake.getStoredValue()).toEqual({ focusedGainDb: 3, backgroundGainDb: -20 });
+    expect(await getUserPlayerSettings(7)).toEqual({ focusedGainDb: 3, backgroundGainDb: -20 });
+    expect(await getUserPlayerSettings(8)).toEqual({ focusedGainDb: -2, backgroundGainDb: -10 });
+    expect(fake.getStoredValue("organization:7:player")).toEqual({ focusedGainDb: 3, backgroundGainDb: -20 });
   });
 
   it("reports browsers without IndexedDB support", async () => {
@@ -33,12 +35,12 @@ describe("userPlayerSettings storage", () => {
       value: undefined,
     });
 
-    await expect(getUserPlayerSettings()).rejects.toThrow("IndexedDB wird von diesem Browser nicht unterstützt.");
+    await expect(getUserPlayerSettings(7)).rejects.toThrow("IndexedDB wird von diesem Browser nicht unterstützt.");
   });
 });
 
 function createFakeIndexedDb() {
-  let storedValue: unknown;
+  const storedValues = new Map<IDBValidKey, unknown>();
   let storeCreated = false;
 
   const database = {
@@ -57,16 +59,16 @@ function createFakeIndexedDb() {
         onabort: null,
       };
       transaction.objectStore = () => ({
-        get: () => {
+        get: (key: IDBValidKey) => {
           const request: Record<string, unknown> = { result: undefined, error: null, onsuccess: null, onerror: null };
           queueMicrotask(() => {
-            request.result = storedValue;
+            request.result = storedValues.get(key);
             (request.onsuccess as (() => void) | null)?.();
           });
           return request;
         },
-        put: (value: unknown) => {
-          storedValue = value;
+        put: (value: unknown, key: IDBValidKey) => {
+          storedValues.set(key, value);
           queueMicrotask(() => (transaction.oncomplete as (() => void) | null)?.());
           return {};
         },
@@ -99,6 +101,6 @@ function createFakeIndexedDb() {
 
   return {
     factory,
-    getStoredValue: () => storedValue,
+    getStoredValue: (key: IDBValidKey) => storedValues.get(key),
   };
 }

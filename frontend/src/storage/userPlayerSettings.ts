@@ -11,14 +11,13 @@ export const DEFAULT_USER_PLAYER_SETTINGS: UserPlayerSettings = {
 const DATABASE_NAME = "teamtracks";
 const DATABASE_VERSION = 1;
 const STORE_NAME = "user-settings";
-const PLAYER_SETTINGS_KEY = "player";
 
-export async function getUserPlayerSettings(): Promise<UserPlayerSettings | null> {
+export async function getUserPlayerSettings(organizationId: number): Promise<UserPlayerSettings | null> {
   const database = await openDatabase();
   try {
     return await new Promise<UserPlayerSettings | null>((resolve, reject) => {
       const transaction = database.transaction(STORE_NAME, "readonly");
-      const request = transaction.objectStore(STORE_NAME).get(PLAYER_SETTINGS_KEY);
+      const request = transaction.objectStore(STORE_NAME).get(playerSettingsKey(organizationId));
       request.onsuccess = () => resolve(isUserPlayerSettings(request.result) ? request.result : null);
       request.onerror = () => reject(request.error ?? new Error("Benutzereinstellungen konnten nicht gelesen werden."));
     });
@@ -27,12 +26,12 @@ export async function getUserPlayerSettings(): Promise<UserPlayerSettings | null
   }
 }
 
-export async function saveUserPlayerSettings(settings: UserPlayerSettings): Promise<void> {
+export async function saveUserPlayerSettings(organizationId: number, settings: UserPlayerSettings): Promise<void> {
   const database = await openDatabase();
   try {
     await new Promise<void>((resolve, reject) => {
       const transaction = database.transaction(STORE_NAME, "readwrite");
-      transaction.objectStore(STORE_NAME).put(settings, PLAYER_SETTINGS_KEY);
+      transaction.objectStore(STORE_NAME).put(settings, playerSettingsKey(organizationId));
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error ?? new Error("Benutzereinstellungen konnten nicht gespeichert werden."));
       transaction.onabort = () => reject(transaction.error ?? new Error("Speichern der Benutzereinstellungen wurde abgebrochen."));
@@ -40,6 +39,13 @@ export async function saveUserPlayerSettings(settings: UserPlayerSettings): Prom
   } finally {
     database.close();
   }
+}
+
+function playerSettingsKey(organizationId: number): string {
+  if (!Number.isSafeInteger(organizationId) || organizationId <= 0) {
+    throw new Error("Ungültige Organisation für Benutzereinstellungen.");
+  }
+  return `organization:${organizationId}:player`;
 }
 
 function openDatabase(): Promise<IDBDatabase> {

@@ -22,22 +22,23 @@ describe("UserSettingsView", () => {
   });
 
   it("loads values and saves slider changes automatically", async () => {
-    const wrapper = mount(UserSettingsView);
+    const wrapper = mount(UserSettingsView, { props: { organizationId: "7" } });
     await flushPromises();
 
+    expect(storageMocks.get).toHaveBeenCalledWith(7);
     expect(wrapper.find<HTMLInputElement>("#user-focus-gain").element.value).toBe("2");
     expect(wrapper.find<HTMLInputElement>("#user-background-gain").element.value).toBe("-18");
 
     await wrapper.find("#user-focus-gain").setValue("-4");
     await flushPromises();
 
-    expect(storageMocks.save).toHaveBeenCalledWith({ focusedGainDb: -4, backgroundGainDb: -18 });
+    expect(storageMocks.save).toHaveBeenCalledWith(7, { focusedGainDb: -4, backgroundGainDb: -18 });
     expect(wrapper.text()).toContain("Gespeichert.");
   });
 
   it("shows storage errors without removing the controls", async () => {
     storageMocks.save.mockRejectedValue(new Error("Speichern fehlgeschlagen"));
-    const wrapper = mount(UserSettingsView);
+    const wrapper = mount(UserSettingsView, { props: { organizationId: "7" } });
     await flushPromises();
 
     await wrapper.find("#user-background-gain").setValue("-20");

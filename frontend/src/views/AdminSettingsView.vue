@@ -3,6 +3,8 @@ import { onMounted, ref } from "vue";
 import type { AppSettings } from "@/api/settings";
 import { getSettings, updateSettings } from "@/api/settings";
 
+const props = defineProps<{ organizationId: string }>();
+const organizationId = Number(props.organizationId);
 const settings = ref<AppSettings | null>(null);
 const loading = ref(false);
 const saving = ref(false);
@@ -12,14 +14,14 @@ const saved = ref(false);
 onMounted(() => void load());
 async function load(): Promise<void> {
   loading.value = true; error.value = null;
-  try { settings.value = await getSettings(); }
+  try { settings.value = await getSettings(organizationId); }
   catch (err) { error.value = err instanceof Error ? err.message : "Einstellungen konnten nicht geladen werden."; }
   finally { loading.value = false; }
 }
 async function save(): Promise<void> {
   if (!settings.value) return;
   saving.value = true; error.value = null; saved.value = false;
-  try { settings.value = await updateSettings(settings.value); saved.value = true; }
+  try { settings.value = await updateSettings(organizationId, settings.value); saved.value = true; }
   catch (err) { error.value = err instanceof Error ? err.message : "Einstellungen konnten nicht gespeichert werden."; }
   finally { saving.value = false; }
 }
@@ -27,7 +29,7 @@ async function save(): Promise<void> {
 
 <template>
   <section>
-    <div class="page-header"><div><p class="eyebrow">Admin</p><h1>Einstellungen</h1><p class="muted">Globale Werte für neue Conversion-Jobs und den Player.</p></div></div>
+    <div class="page-header"><div><p class="eyebrow">Admin</p><h1>Einstellungen</h1><p class="muted">Werte dieser Organisation für neue Conversion-Jobs und den Player.</p></div></div>
     <p v-if="loading" class="muted">Einstellungen werden geladen...</p>
     <form v-else-if="settings" class="settings-form" @submit.prevent="save">
       <section class="panel"><h2>Conversion</h2><div class="settings-grid">

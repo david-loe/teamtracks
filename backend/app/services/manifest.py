@@ -45,10 +45,10 @@ def build_song_manifest(song: Song, settings: AppSettings, selected_key_id: int 
     )
 
 
-def get_song_for_manifest(db: Session, song_id: int) -> Song | None:
+def get_song_for_manifest(db: Session, organization_id: int, song_id: int) -> Song | None:
     return db.scalar(
         select(Song)
-        .where(Song.id == song_id)
+        .where(Song.id == song_id, Song.organization_id == organization_id)
         .options(
             selectinload(Song.stems).selectinload(Stem.key_assets),
             selectinload(Song.key_variants).selectinload(SongKey.stem_assets),
@@ -66,7 +66,10 @@ def build_manifest_stem(
     media_url = None
     if is_playback_stem:
         asset_version = asset.updated_at.strftime("%Y%m%d%H%M%S%f")
-        media_url = f"/media/songs/{song.id}/keys/{asset.song_key_id}/stems/{stem.id}.m4a?v={asset_version}"
+        media_url = (
+            f"/media/organizations/{song.organization_id}/songs/{song.id}"
+            f"/keys/{asset.song_key_id}/stems/{stem.id}.m4a?v={asset_version}"
+        )
 
     return ManifestStem(
         id=stem.id,

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
 
 import * as manifestApi from "@/api/manifest";
+import * as organizationsApi from "@/api/organizations";
 import type { SongManifest } from "@/types/manifest";
 import PlayerView from "@/views/PlayerView.vue";
 
@@ -63,6 +64,10 @@ vi.mock("@/api/manifest", () => ({
   getSongManifest: vi.fn(),
 }));
 
+vi.mock("@/api/organizations", () => ({
+  getBrowserSession: vi.fn(),
+}));
+
 vi.mock("@/audio/ToneAudioEngine", () => ({
   ToneAudioEngine: engineMocks.ToneAudioEngine,
 }));
@@ -92,7 +97,7 @@ const manifest: SongManifest = {
       key: null,
       focusable: true,
       status: "ready",
-      url: "/media/songs/10/keys/100/stems/1.m4a",
+      url: "/media/organizations/7/songs/10/keys/100/stems/1.m4a",
       codec: "aac",
       container: "m4a",
       channels: 2,
@@ -115,6 +120,10 @@ describe("PlayerView", () => {
     engineMocks.instances.length = 0;
     engineMocks.pendingLoads.length = 0;
     userSettingsMocks.get.mockResolvedValue(null);
+    vi.mocked(organizationsApi.getBrowserSession).mockResolvedValue({
+      authenticated: false,
+      organizations: [],
+    });
   });
 
   it("loads stems automatically and keeps controls disabled until loading completes", async () => {
@@ -170,7 +179,7 @@ describe("PlayerView", () => {
 
   it("continues only the newly selected key when switching during decoding", async () => {
     engineMocks.behavior.initialProgressRatio = 1;
-    vi.mocked(manifestApi.getSongManifest).mockImplementation(async (_songId, key) => manifestForKey(key ?? 0));
+    vi.mocked(manifestApi.getSongManifest).mockImplementation(async (_organizationId, _songId, key) => manifestForKey(key ?? 0));
 
     const { wrapper } = await mountPlayerView();
     await vi.waitFor(() => expect(wrapper.text()).toContain("Stems werden dekodiert…"));
@@ -269,13 +278,13 @@ describe("PlayerView", () => {
     const { wrapper } = await mountPlayerView("/songs/10?key=2");
     await flushPromises();
 
-    expect(manifestApi.getSongManifest).toHaveBeenCalledWith(10, 2);
+    expect(manifestApi.getSongManifest).toHaveBeenCalledWith(7, 10, 2);
     expect(wrapper.find<HTMLSelectElement>("#player-key").element.value).toBe("2");
   });
 
   it("updates the URL and reloads the manifest when a key is selected", async () => {
     engineMocks.behavior.holdLoad = false;
-    vi.mocked(manifestApi.getSongManifest).mockImplementation(async (_songId, key) => manifestForKey(key ?? 0));
+    vi.mocked(manifestApi.getSongManifest).mockImplementation(async (_organizationId, _songId, key) => manifestForKey(key ?? 0));
     const { wrapper, router } = await mountPlayerView("/songs/10?view=mixer");
     await flushPromises();
 
@@ -283,12 +292,12 @@ describe("PlayerView", () => {
     await flushPromises();
 
     expect(router.currentRoute.value.query).toEqual({ view: "mixer", key: "2" });
-    expect(manifestApi.getSongManifest).toHaveBeenLastCalledWith(10, 2);
+    expect(manifestApi.getSongManifest).toHaveBeenLastCalledWith(7, 10, 2);
   });
 
   it("removes key when the original key is selected", async () => {
     engineMocks.behavior.holdLoad = false;
-    vi.mocked(manifestApi.getSongManifest).mockImplementation(async (_songId, key) => manifestForKey(key ?? 0));
+    vi.mocked(manifestApi.getSongManifest).mockImplementation(async (_organizationId, _songId, key) => manifestForKey(key ?? 0));
     const { wrapper, router } = await mountPlayerView("/songs/10?key=2&view=mixer");
     await flushPromises();
 
@@ -296,12 +305,12 @@ describe("PlayerView", () => {
     await flushPromises();
 
     expect(router.currentRoute.value.query).toEqual({ view: "mixer" });
-    expect(manifestApi.getSongManifest).toHaveBeenLastCalledWith(10, null);
+    expect(manifestApi.getSongManifest).toHaveBeenLastCalledWith(7, 10, null);
   });
 
   it("reloads the selected key during browser back and forward navigation", async () => {
     engineMocks.behavior.holdLoad = false;
-    vi.mocked(manifestApi.getSongManifest).mockImplementation(async (_songId, key) => manifestForKey(key ?? 0));
+    vi.mocked(manifestApi.getSongManifest).mockImplementation(async (_organizationId, _songId, key) => manifestForKey(key ?? 0));
     const { wrapper, router } = await mountPlayerView();
     await flushPromises();
 
@@ -312,11 +321,11 @@ describe("PlayerView", () => {
 
     router.back();
     await vi.waitFor(() => expect(router.currentRoute.value.query.key).toBe("2"));
-    expect(manifestApi.getSongManifest).toHaveBeenLastCalledWith(10, 2);
+    expect(manifestApi.getSongManifest).toHaveBeenLastCalledWith(7, 10, 2);
 
     router.forward();
     await vi.waitFor(() => expect(router.currentRoute.value.query.key).toBeUndefined());
-    expect(manifestApi.getSongManifest).toHaveBeenLastCalledWith(10, null);
+    expect(manifestApi.getSongManifest).toHaveBeenLastCalledWith(7, 10, null);
   });
 
   it.each(["x", "12", "2&key=3"])("removes an invalid key query value: %s", async (keyQuery) => {
@@ -327,7 +336,7 @@ describe("PlayerView", () => {
     await vi.waitFor(() => expect(router.currentRoute.value.query.key).toBeUndefined());
 
     expect(router.currentRoute.value.query.view).toBe("mixer");
-    expect(manifestApi.getSongManifest).toHaveBeenLastCalledWith(10, null);
+    expect(manifestApi.getSongManifest).toHaveBeenLastCalledWith(7, 10, null);
   });
 
   it("canonicalizes an explicitly requested original key after loading the manifest", async () => {
@@ -337,21 +346,39 @@ describe("PlayerView", () => {
     const { router } = await mountPlayerView("/songs/10?key=0&view=mixer");
     await vi.waitFor(() => expect(router.currentRoute.value.query.key).toBeUndefined());
 
-    expect(manifestApi.getSongManifest).toHaveBeenNthCalledWith(1, 10, 0);
+    expect(manifestApi.getSongManifest).toHaveBeenNthCalledWith(1, 7, 10, 0);
     expect(router.currentRoute.value.query.view).toBe("mixer");
+  });
+
+  it("refreshes the session and redirects after organization access is revoked", async () => {
+    vi.mocked(manifestApi.getSongManifest).mockRejectedValue(
+      Object.assign(new Error("Organization login required"), { status: 401 }),
+    );
+
+    const { router } = await mountPlayerView();
+    await vi.waitFor(() => expect(router.currentRoute.value.name).toBe("organizations"));
+
+    expect(organizationsApi.getBrowserSession).toHaveBeenCalledTimes(1);
+    expect(router.currentRoute.value.query).toEqual({
+      organizationId: "7",
+      redirect: "/songs/10",
+    });
   });
 });
 
 async function mountPlayerView(path = "/songs/10") {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: "/songs/:id", component: { template: "<div />" } }],
+    routes: [
+      { path: "/songs/:id", component: { template: "<div />" } },
+      { path: "/organizations", name: "organizations", component: { template: "<div />" } },
+    ],
   });
   await router.push(path);
   await router.isReady();
 
   const wrapper = mount(PlayerView, {
-    props: { id: "10" },
+    props: { organizationId: "7", id: "10" },
     global: {
       plugins: [createPinia(), router],
       stubs: {
@@ -374,7 +401,7 @@ function manifestForKey(key: number): SongManifest {
     selectedKeyId: key === 2 ? 101 : 100,
     stems: manifest.stems.map((stem) => ({
       ...stem,
-      url: `/media/songs/10/keys/${key === 2 ? 101 : 100}/stems/${stem.id}.m4a`,
+      url: `/media/organizations/7/songs/10/keys/${key === 2 ? 101 : 100}/stems/${stem.id}.m4a`,
     })),
   };
 }

@@ -36,16 +36,25 @@ export class ToneAudioEngine implements AudioEngine {
   }
 
   async loadManifest(manifest: SongManifest, onProgress: (progress: StemLoadProgress) => void): Promise<void> {
+    this.abortController?.abort();
     this.disposeNodes();
     this.durationSeconds = Math.max(0, (manifest.song.durationMs ?? 0) / 1000);
-    this.abortController = new AbortController();
+    const abortController = new AbortController();
+    this.abortController = abortController;
 
     const playableStems = manifest.stems.filter(isPlayableStem);
     await Promise.all(
       playableStems.map(async (stem) => {
-        const audioBuffer = await this.loadAudioBuffer(stem, onProgress, this.abortController?.signal);
+        const audioBuffer = await this.loadAudioBuffer(stem, onProgress, abortController.signal);
+        abortController.signal.throwIfAborted();
         const player = new Tone.Player(audioBuffer);
         const gain = new Tone.Gain(0, "decibels").toDestination();
+        if (abortController.signal.aborted || this.abortController !== abortController) {
+          player.dispose();
+          gain.dispose();
+          abortController.signal.throwIfAborted();
+          throw new DOMException("Audio load was superseded.", "AbortError");
+        }
         player.connect(gain);
         this.stems.set(stem.id, {
           player,
@@ -57,6 +66,9 @@ export class ToneAudioEngine implements AudioEngine {
         this.applyStemGain(stem.id);
       }),
     );
+    if (this.abortController === abortController) {
+      this.abortController = null;
+    }
   }
 
   play(): void {
@@ -214,9 +226,9 @@ async function fetchArrayBufferWithProgress(
   onProgress: (progress: StemLoadProgress) => void,
   signal?: AbortSignal,
 ): Promise<ArrayBuffer> {
-  const response = await fetch(url, { signal });
+  const response = await fetch(url, { signal, credentials: "include" });
   if (!response.ok) {
-    throw new Error(`Audio-Datei konnte nicht geladen werden (${response.status}).`);
+    throw new AudioRequestError(response.status);
   }
 
   const totalBytes = parseContentLength(response.headers.get("content-length"));
@@ -254,6 +266,13 @@ async function fetchArrayBufferWithProgress(
   const buffer = mergeChunks(chunks, loadedBytes);
   onProgress({ stemId, loadedBytes, totalBytes: totalBytes ?? loadedBytes, ratio: 1 });
   return buffer;
+}
+
+export class AudioRequestError extends Error {
+  constructor(public readonly status: number) {
+    super(`Audio-Datei konnte nicht geladen werden (${status}).`);
+    this.name = "AudioRequestError";
+  }
 }
 
 function parseContentLength(value: string | null): number | null {

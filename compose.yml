@@ -52,8 +52,8 @@ services:
     environment:
       DATABASE_URL: sqlite:////tmp/teamtracks-test.db
       STORAGE_ROOT: /tmp/teamtracks-storage
-      ADMIN_PASSWORD: test-password
-      ADMIN_SESSION_SECRET: test-session-secret
+      PLATFORM_ADMIN_PASSWORD: test-password
+      AUTH_SECRET: test-auth-secret
 
   frontend:
     build:

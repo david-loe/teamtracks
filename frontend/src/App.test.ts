@@ -1,13 +1,18 @@
 import { mount } from "@vue/test-utils";
 import { createPinia } from "pinia";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/api/organizations", () => ({
+  getBrowserSession: vi.fn().mockResolvedValue({ authenticated: false, organizations: [] }),
+  listOrganizations: vi.fn().mockResolvedValue([]),
+}));
 
 import App from "./App.vue";
 import { router } from "./router";
 
 describe("App", () => {
   it("renders the application shell", async () => {
-    router.push("/songs");
+    router.push("/organizations");
     await router.isReady();
 
     const wrapper = mount(App, {
@@ -17,7 +22,6 @@ describe("App", () => {
     });
 
     expect(wrapper.text()).toContain("TeamTracks");
-    expect(wrapper.text()).toContain("Songs");
-    expect(wrapper.text()).toContain("Einstellungen");
+    expect(wrapper.text()).toContain("Organisation auswählen");
   });
 });

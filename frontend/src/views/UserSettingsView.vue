@@ -8,6 +8,8 @@ import {
   type UserPlayerSettings,
 } from "@/storage/userPlayerSettings";
 
+const props = defineProps<{ organizationId: string }>();
+const organizationId = Number(props.organizationId);
 const MIN_GAIN_DB = -60;
 const MAX_GAIN_DB = 12;
 
@@ -25,7 +27,7 @@ async function load(): Promise<void> {
   loading.value = true;
   error.value = null;
   try {
-    const storedSettings = (await getUserPlayerSettings()) ?? DEFAULT_USER_PLAYER_SETTINGS;
+    const storedSettings = (await getUserPlayerSettings(organizationId)) ?? DEFAULT_USER_PLAYER_SETTINGS;
     settings.value = {
       focusedGainDb: clampGain(storedSettings.focusedGainDb),
       backgroundGainDb: clampGain(storedSettings.backgroundGainDb),
@@ -44,7 +46,7 @@ async function save(): Promise<void> {
   error.value = null;
   try {
     const nextSettings = { ...settings.value };
-    saveQueue = saveQueue.catch(() => undefined).then(() => saveUserPlayerSettings(nextSettings));
+    saveQueue = saveQueue.catch(() => undefined).then(() => saveUserPlayerSettings(organizationId, nextSettings));
     await saveQueue;
     if (requestId === saveId) {
       saved.value = true;
@@ -75,7 +77,7 @@ function clampGain(value: number): number {
       <div>
         <p class="eyebrow">Benutzer</p>
         <h1>Einstellungen</h1>
-        <p class="muted">Diese Werte gelten in diesem Browser für alle Songs.</p>
+        <p class="muted">Diese Werte gelten in diesem Browser für alle Songs dieser Organisation.</p>
       </div>
     </div>
 

@@ -12,22 +12,27 @@ from app.models.stem import Stem
 from app.models.stem_key_asset import StemKeyAsset
 from app.schemas.conversion_job import ConversionJobBatchRead
 from app.schemas.transposition import StemKeyAssetInventoryItemRead, StemKeyAssetVariantRead, TransposeSongRequest
-from app.services.auth import require_admin_session
+from app.services.auth import require_organization_admin_access
 from app.services.conversion import ConversionError, semitone_offset_for_target, unique_keys
 from app.services.settings import get_or_create_app_settings
 
 
-router = APIRouter(tags=["admin-transposition"], dependencies=[Depends(require_admin_session)])
+router = APIRouter(
+    prefix="/api/organizations/{organization_id}/admin/songs",
+    tags=["admin-transposition"],
+    dependencies=[Depends(require_organization_admin_access)],
+)
 
 
-@router.post("/api/admin/songs/{song_id}/transpose", response_model=ConversionJobBatchRead)
+@router.post("/{song_id}/transpose", response_model=ConversionJobBatchRead)
 def transpose_song(
+    organization_id: int,
     song_id: int,
     payload: TransposeSongRequest,
     db: Session = Depends(get_db),
 ) -> ConversionJobBatchRead:
-    song = get_song_or_404(db, song_id)
-    settings = get_or_create_app_settings(db)
+    song = get_song_or_404(db, organization_id, song_id)
+    settings = get_or_create_app_settings(db, organization_id)
     try:
         target_keys = unique_keys(payload.target_keys)
     except ConversionError as exc:
@@ -56,9 +61,11 @@ def transpose_song(
     return ConversionJobBatchRead(job_ids=[job.id for job in jobs], status=ConversionJobStatus.QUEUED)
 
 
-@router.get("/api/admin/songs/{song_id}/key-assets", response_model=list[StemKeyAssetInventoryItemRead])
-def list_key_assets(song_id: int, db: Session = Depends(get_db)) -> list[StemKeyAssetInventoryItemRead]:
-    song = get_song_or_404(db, song_id)
+@router.get("/{song_id}/key-assets", response_model=list[StemKeyAssetInventoryItemRead])
+def list_key_assets(
+    organization_id: int, song_id: int, db: Session = Depends(get_db)
+) -> list[StemKeyAssetInventoryItemRead]:
+    song = get_song_or_404(db, organization_id, song_id)
     stems = list(db.scalars(select(Stem).where(Stem.song_id == song_id).order_by(Stem.created_at.asc(), Stem.id.asc())))
     song_keys = list(
         db.scalars(

@@ -11,9 +11,11 @@ import { formatBytes, formatDuration } from "@/types/format";
 import { formatSongKey, SONG_KEYS } from "@/types/keys";
 
 const props = defineProps<{
+  organizationId: string;
   id: string;
 }>();
 
+const organizationId = computed(() => Number(props.organizationId));
 const songId = computed(() => Number(props.id));
 const songsStore = useSongsStore();
 const stemsStore = useAdminStemsStore();
@@ -51,15 +53,15 @@ async function loadPage(): Promise<void> {
   }
 
   await Promise.all([
-    songsStore.fetchSong(songId.value),
-    stemsStore.load(songId.value),
-    stemsStore.loadJobs(songId.value),
-    stemsStore.loadKeyAssets(songId.value),
+    songsStore.fetchSong(organizationId.value, songId.value),
+    stemsStore.load(organizationId.value, songId.value),
+    stemsStore.loadJobs(organizationId.value, songId.value),
+    stemsStore.loadKeyAssets(organizationId.value, songId.value),
   ]);
 }
 
-async function uploadStems(payload: Parameters<typeof stemsStore.uploadMany>[1]) {
-  return stemsStore.uploadMany(songId.value, payload);
+async function uploadStems(payload: Parameters<typeof stemsStore.uploadMany>[2]) {
+  return stemsStore.uploadMany(organizationId.value, songId.value, payload);
 }
 
 async function deleteStem(stemId: number): Promise<void> {
@@ -67,17 +69,17 @@ async function deleteStem(stemId: number): Promise<void> {
     return;
   }
 
-  await stemsStore.removeStem(stemId);
+  await stemsStore.removeStem(organizationId.value, stemId);
 }
 
 async function transposeSong(): Promise<void> {
   if (targetKeys.value.length === 0) {
     return;
   }
-  const ok = await stemsStore.transpose(songId.value, targetKeys.value);
+  const ok = await stemsStore.transpose(organizationId.value, songId.value, targetKeys.value);
   if (ok) {
     targetKeys.value = [];
-    await songsStore.fetchSong(songId.value);
+    await songsStore.fetchSong(organizationId.value, songId.value);
   }
 }
 
@@ -85,12 +87,12 @@ async function saveSongDetails(): Promise<void> {
   if (!songsStore.currentSong) {
     return;
   }
-  await songsStore.updateSong(songId.value, {
+  await songsStore.updateSong(organizationId.value, songId.value, {
     title: editForm.title.trim(),
     artist: editForm.artist.trim(),
     originalKey: editForm.originalKey,
   });
-  await stemsStore.loadKeyAssets(songId.value);
+  await stemsStore.loadKeyAssets(organizationId.value, songId.value);
 }
 
 function variantsForStem(stemId: number): StemKeyAssetVariant[] {
@@ -111,8 +113,8 @@ function variantsForStem(stemId: number): StemKeyAssetVariant[] {
         </p>
       </div>
       <div class="header-actions">
-        <RouterLink class="button button-secondary" to="/admin/songs">Zur Liste</RouterLink>
-        <RouterLink v-if="songsStore.currentSong?.status === 'ready'" class="button button-secondary" :to="`/songs/${id}`">Player</RouterLink>
+        <RouterLink class="button button-secondary" :to="`/org/${organizationId}/admin/songs`">Zur Liste</RouterLink>
+        <RouterLink v-if="songsStore.currentSong?.status === 'ready'" class="button button-secondary" :to="`/org/${organizationId}/songs/${id}`">Player</RouterLink>
       </div>
     </div>
 
@@ -155,7 +157,7 @@ function variantsForStem(stemId: number): StemKeyAssetVariant[] {
     <section class="panel section-block">
       <div class="section-heading">
         <h2>Stems</h2>
-        <button class="button button-secondary" type="button" :disabled="stemsStore.loading" @click="stemsStore.load(songId)">
+        <button class="button button-secondary" type="button" :disabled="stemsStore.loading" @click="stemsStore.load(organizationId, songId)">
           Aktualisieren
         </button>
       </div>
@@ -233,7 +235,7 @@ function variantsForStem(stemId: number): StemKeyAssetVariant[] {
           class="button button-primary"
           type="button"
           :disabled="stemsStore.startingConversion || stemsStore.convertibleStems.length === 0"
-          @click="stemsStore.startConversion(songId)"
+          @click="stemsStore.startConversion(organizationId, songId)"
         >
           {{ stemsStore.startingConversion ? "Wird gestartet..." : "Conversion starten" }}
         </button>
@@ -241,7 +243,7 @@ function variantsForStem(stemId: number): StemKeyAssetVariant[] {
           class="button button-secondary"
           type="button"
           :disabled="stemsStore.startingConversion || stemsStore.stems.length === 0"
-          @click="stemsStore.reconvert(songId)"
+          @click="stemsStore.reconvert(organizationId, songId)"
         >
           Neu konvertieren
         </button>

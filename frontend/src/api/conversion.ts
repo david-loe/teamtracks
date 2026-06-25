@@ -35,16 +35,17 @@ export interface ConversionJob {
 }
 
 export function createConversionJobs(
+  organizationId: number,
   songId: number,
   input: ConversionJobCreateInput = {},
 ): Promise<ConversionJobBatch> {
-  return apiJson<ConversionJobBatch>(`/api/admin/songs/${songId}/conversion-jobs`, input);
+  return apiJson<ConversionJobBatch>(`/api/organizations/${organizationId}/admin/songs/${songId}/conversion-jobs`, input);
 }
 
-export function getConversionJob(jobId: number): Promise<ConversionJob> {
-  return apiRequest<ConversionJob>(`/api/admin/conversion-jobs/${jobId}`);
+export function getConversionJob(organizationId: number, jobId: number): Promise<ConversionJob> {
+  return apiRequest<ConversionJob>(`/api/organizations/${organizationId}/admin/conversion-jobs/${jobId}`);
 }
 
-export function listConversionJobs(songId: number): Promise<ConversionJob[]> {
-  return apiRequest<ConversionJob[]>(`/api/admin/songs/${songId}/conversion-jobs`);
+export function listConversionJobs(organizationId: number, songId: number): Promise<ConversionJob[]> {
+  return apiRequest<ConversionJob[]>(`/api/organizations/${organizationId}/admin/songs/${songId}/conversion-jobs`);
 }

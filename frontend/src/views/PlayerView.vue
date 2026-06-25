@@ -5,18 +5,23 @@ import type { LocationQueryValue } from "vue-router";
 
 import LoadingProgress from "@/components/LoadingProgress.vue";
 import StemMixer from "@/components/StemMixer.vue";
+import { useOrganizationsStore } from "@/stores/organizations";
 import { usePlayerStore } from "@/stores/player";
 import { formatDuration } from "@/types/format";
 import { formatSongKey } from "@/types/keys";
 
 const props = defineProps<{
+  organizationId: string;
   id: string;
 }>();
 
+const organizationId = computed(() => Number(props.organizationId));
 const songId = computed(() => Number(props.id));
 const playerStore = usePlayerStore();
+const organizationsStore = useOrganizationsStore();
 const route = useRoute();
 const router = useRouter();
+let handlingAccessError = false;
 
 const seekValue = computed(() => playerStore.currentTimeSeconds);
 
@@ -25,11 +30,20 @@ onUnmounted(() => {
 });
 
 watch(
-  [songId, () => route.query.key],
-  ([nextSongId, rawKey]) => {
-    void loadPage(nextSongId, rawKey);
+  [organizationId, songId, () => route.query.key],
+  ([nextOrganizationId, nextSongId, rawKey]) => {
+    void loadPage(nextOrganizationId, nextSongId, rawKey);
   },
   { immediate: true },
+);
+
+watch(
+  () => playerStore.accessErrorStatus,
+  (status) => {
+    if ((status === 401 || status === 403) && !handlingAccessError) {
+      void handleAccessError();
+    }
+  },
 );
 
 watch(
@@ -42,8 +56,12 @@ watch(
   },
 );
 
-async function loadPage(nextSongId: number, rawKey: LocationQueryValue | LocationQueryValue[] | undefined): Promise<void> {
-  if (!Number.isFinite(nextSongId)) {
+async function loadPage(
+  nextOrganizationId: number,
+  nextSongId: number,
+  rawKey: LocationQueryValue | LocationQueryValue[] | undefined,
+): Promise<void> {
+  if (!Number.isFinite(nextOrganizationId) || !Number.isFinite(nextSongId)) {
     return;
   }
 
@@ -53,7 +71,23 @@ async function loadPage(nextSongId: number, rawKey: LocationQueryValue | Locatio
     return;
   }
 
-  await playerStore.load(nextSongId, parsedKey.key);
+  await playerStore.load(nextOrganizationId, nextSongId, parsedKey.key);
+}
+
+async function handleAccessError(): Promise<void> {
+  handlingAccessError = true;
+  const deniedOrganizationId = organizationId.value;
+  const redirect = route.fullPath;
+  playerStore.reset();
+  try {
+    await organizationsStore.refreshSession();
+  } catch {
+    // Die Auswahlseite kann auch ohne wiederherstellbare Browser-Session laden.
+  }
+  await router.replace({
+    name: "organizations",
+    query: { organizationId: String(deniedOrganizationId), redirect },
+  });
 }
 
 function seek(event: Event): void {
@@ -125,7 +159,7 @@ async function replaceKeyQuery(key: number | null): Promise<void> {
         </p>
       </div>
       <div class="header-actions">
-        <RouterLink class="button button-secondary" to="/songs">Zur Liste</RouterLink>
+        <RouterLink class="button button-secondary" :to="`/org/${organizationId}/songs`">Zur Liste</RouterLink>
       </div>
     </div>
 

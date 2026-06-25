@@ -58,8 +58,131 @@ button:disabled {
 
 .nav {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 16px;
   color: #4b5563;
+}
+
+.organization-switcher {
+  max-width: 220px;
+}
+
+.organization-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.organization-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.organization-card {
+  display: grid;
+  gap: 12px;
+  text-align: left;
+}
+
+.organization-card img {
+  width: 100%;
+  height: 120px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.platform-login-link {
+  margin-top: 28px;
+  text-align: center;
+}
+
+.platform-login-link a {
+  color: #0f766e;
+  font-weight: 650;
+}
+
+.management-list {
+  display: grid;
+  gap: 20px;
+}
+
+.management-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.management-form label {
+  display: grid;
+  gap: 6px;
+  color: #374151;
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
+.form-wide {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.organization-management-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 24px;
+}
+
+.organization-management-heading {
+  min-width: 0;
+}
+
+.organization-management-heading img,
+.organization-preview img {
+  width: 100%;
+  height: 140px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.organization-management-heading h2 {
+  overflow-wrap: anywhere;
+}
+
+.admin-organization-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.organization-preview {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.organization-preview img {
+  height: 72px;
+}
+
+.invite-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.danger-zone {
+  grid-column: 1 / -1;
+  border-color: #fecaca;
+  background: #fffafa;
 }
 
 .nav a.router-link-active {
@@ -586,12 +709,22 @@ textarea:focus {
 
 @media (max-width: 720px) {
   .topbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
     padding: 0 12px;
+    padding-bottom: 10px;
+    padding-top: 10px;
   }
 
   .nav {
+    justify-content: flex-end;
     gap: 10px;
     font-size: 0.86rem;
+  }
+
+  .organization-switcher {
+    max-width: 160px;
   }
 
   .page-header {
@@ -601,6 +734,16 @@ textarea:focus {
 
   .layout-grid {
     grid-template-columns: 1fr;
+  }
+
+  .management-form,
+  .organization-management-card,
+  .admin-organization-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .danger-zone {
+    grid-column: auto;
   }
 
   .upload-row {
@@ -675,8 +818,27 @@ textarea:focus {
   }
 
   .nav {
+    width: 100%;
+    justify-content: flex-start;
     gap: 7px;
     font-size: 0.78rem;
+  }
+
+  .organization-avatar {
+    display: none;
+  }
+
+  .organization-switcher {
+    max-width: 100%;
+  }
+
+  .invite-row,
+  .organization-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .organization-preview img {
+    height: 120px;
   }
 
   .player-options {

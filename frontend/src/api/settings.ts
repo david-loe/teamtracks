@@ -17,10 +17,10 @@ export interface AppSettings {
   backgroundGainMaxDb: number;
 }
 
-export function getSettings(): Promise<AppSettings> {
-  return apiRequest<AppSettings>("/api/admin/settings");
+export function getSettings(organizationId: number): Promise<AppSettings> {
+  return apiRequest<AppSettings>(`/api/organizations/${organizationId}/admin/settings`);
 }
 
-export function updateSettings(settings: AppSettings): Promise<AppSettings> {
-  return apiJson<AppSettings>("/api/admin/settings", settings, { method: "PUT" });
+export function updateSettings(organizationId: number, settings: AppSettings): Promise<AppSettings> {
+  return apiJson<AppSettings>(`/api/organizations/${organizationId}/admin/settings`, settings, { method: "PUT" });
 }

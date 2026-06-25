@@ -7,13 +7,15 @@ import { useSongsStore } from "@/stores/songs";
 import { SONG_KEYS } from "@/types/keys";
 
 const router = useRouter();
+const props = defineProps<{ organizationId: string }>();
+const organizationId = Number(props.organizationId);
 const songsStore = useSongsStore();
 const form = reactive({ title: "", artist: "", slug: "", description: "", originalKey: 0 });
 
-onMounted(() => void songsStore.fetchSongs());
+onMounted(() => void songsStore.fetchSongs(organizationId));
 
 async function createSong(): Promise<void> {
-  const song = await songsStore.createSong({
+  const song = await songsStore.createSong(organizationId, {
     title: form.title.trim(),
     artist: form.artist.trim(),
     slug: form.slug.trim(),
@@ -26,7 +28,7 @@ async function createSong(): Promise<void> {
     form.slug = "";
     form.description = "";
     form.originalKey = 0;
-    await router.push(`/admin/songs/${song.id}`);
+    await router.push(`/org/${organizationId}/admin/songs/${song.id}`);
   }
 }
 
@@ -37,7 +39,7 @@ function slugFromTitle(): void {
 }
 
 async function deleteSong(songId: number): Promise<void> {
-  if (window.confirm("Song inklusive Stems und Dateien löschen?")) await songsStore.deleteSong(songId);
+  if (window.confirm("Song inklusive Stems und Dateien löschen?")) await songsStore.deleteSong(organizationId, songId);
 }
 </script>
 
@@ -60,11 +62,11 @@ async function deleteSong(songId: number): Promise<void> {
         </form>
       </section>
       <section class="panel">
-        <div class="section-heading"><h2>Songliste</h2><button class="button button-secondary" :disabled="songsStore.loading" @click="songsStore.fetchSongs">Aktualisieren</button></div>
+        <div class="section-heading"><h2>Songliste</h2><button class="button button-secondary" :disabled="songsStore.loading" @click="songsStore.fetchSongs(organizationId)">Aktualisieren</button></div>
         <p v-if="songsStore.error" class="error-text">{{ songsStore.error }}</p>
         <p v-if="songsStore.loading" class="muted">Songs werden geladen...</p>
         <p v-else-if="!songsStore.hasSongs" class="muted">Noch keine Songs vorhanden.</p>
-        <SongList v-else :songs="songsStore.songs" :deleting-id="songsStore.deletingId" @delete="deleteSong" />
+        <SongList v-else :organization-id="organizationId" :songs="songsStore.songs" :deleting-id="songsStore.deletingId" @delete="deleteSong" />
       </section>
     </div>
   </section>

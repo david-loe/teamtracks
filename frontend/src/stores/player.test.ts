@@ -85,7 +85,7 @@ const manifest: SongManifest = {
       key: null,
       focusable: true,
       status: "ready",
-      url: "/media/songs/10/keys/100/stems/1.m4a",
+      url: "/media/organizations/7/songs/10/keys/100/stems/1.m4a",
       codec: "aac",
       container: "m4a",
       channels: 2,
@@ -102,7 +102,7 @@ const manifest: SongManifest = {
       key: 0,
       focusable: true,
       status: "ready",
-      url: "/media/songs/10/keys/100/stems/2.m4a",
+      url: "/media/organizations/7/songs/10/keys/100/stems/2.m4a",
       codec: "aac",
       container: "m4a",
       channels: 1,
@@ -133,7 +133,7 @@ describe("usePlayerStore", () => {
     vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
 
     const store = usePlayerStore();
-    await store.load(10);
+    await store.load(7, 7, 10);
 
     const engine = engineMocks.instances[0];
     expect(store.manifest).toEqual(manifest);
@@ -161,9 +161,9 @@ describe("usePlayerStore", () => {
     vi.mocked(manifestApi.getSongManifest).mockResolvedValue(transposedManifest);
 
     const store = usePlayerStore();
-    await store.load(10, 2);
+    await store.load(7, 10, 2);
 
-    expect(manifestApi.getSongManifest).toHaveBeenCalledWith(10, 2);
+    expect(manifestApi.getSongManifest).toHaveBeenCalledWith(7, 10, 2);
     expect(store.selectedKey).toBe(2);
     expect(store.selectedKeyId).toBe(101);
     store.reset();
@@ -180,7 +180,7 @@ describe("usePlayerStore", () => {
     vi.mocked(manifestApi.getSongManifest).mockResolvedValue(partialManifest);
 
     const store = usePlayerStore();
-    await store.load(10);
+    await store.load(7, 7, 10);
 
     expect(store.playableStems.map((stem) => stem.id)).toEqual([1]);
     expect(store.unavailableStems.map((stem) => stem.id)).toEqual([2]);
@@ -208,7 +208,7 @@ describe("usePlayerStore", () => {
     vi.mocked(manifestApi.getSongManifest).mockResolvedValue(configuredManifest);
 
     const store = usePlayerStore();
-    await store.load(10);
+    await store.load(7, 7, 10);
 
     expect(store.stemGains).toEqual({ 1: -3, 2: -3 });
     expect(store.focusedGainDb).toBe(1);
@@ -237,8 +237,9 @@ describe("usePlayerStore", () => {
     userSettingsMocks.get.mockResolvedValue({ focusedGainDb: 12, backgroundGainDb: -60 });
 
     const store = usePlayerStore();
-    await store.load(10);
+    await store.load(7, 7, 10);
 
+    expect(userSettingsMocks.get).toHaveBeenCalledWith(7);
     expect(store.focusedGainDb).toBe(5);
     expect(store.backgroundGainDb).toBe(-30);
     expect(engineMocks.instances[0].setFocus).toHaveBeenLastCalledWith({
@@ -249,13 +250,35 @@ describe("usePlayerStore", () => {
     store.reset();
   });
 
+  it("marks manifest authorization failures for session recovery", async () => {
+    vi.mocked(manifestApi.getSongManifest).mockRejectedValue(Object.assign(new Error("Login required"), { status: 401 }));
+
+    const store = usePlayerStore();
+    await store.load(7, 10);
+
+    expect(store.accessErrorStatus).toBe(401);
+    expect(store.manifest).toBeNull();
+  });
+
+  it("marks audio authorization failures and disposes the partial engine", async () => {
+    vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
+    engineMocks.behavior.loadError = Object.assign(new Error("Audio forbidden"), { status: 403 });
+
+    const store = usePlayerStore();
+    await store.load(7, 10);
+
+    expect(store.accessErrorStatus).toBe(403);
+    expect(engineMocks.instances[0].dispose).toHaveBeenCalledTimes(1);
+    expect(store.controlsEnabled).toBe(false);
+  });
+
   it("keeps playback disabled while stems are loading", async () => {
     vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
     const pendingLoad = deferred<void>();
     engineMocks.behavior.loadPromise = pendingLoad.promise;
 
     const store = usePlayerStore();
-    const loadPromise = store.load(10);
+    const loadPromise = store.load(7, 7, 10);
     await vi.waitFor(() => expect(engineMocks.instances).toHaveLength(1));
 
     await store.play();
@@ -273,7 +296,7 @@ describe("usePlayerStore", () => {
     engineMocks.behavior.loadPromise = pendingLoad.promise;
 
     const store = usePlayerStore();
-    const loadPromise = store.load(10);
+    const loadPromise = store.load(7, 7, 10);
     await vi.waitFor(() => expect(engineMocks.behavior.progressCallback).not.toBeNull());
 
     engineMocks.behavior.progressCallback?.({ stemId: 1, loadedBytes: 50, totalBytes: 100, ratio: 0.5 });
@@ -298,7 +321,7 @@ describe("usePlayerStore", () => {
     vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
 
     const store = usePlayerStore();
-    await store.load(10);
+    await store.load(7, 7, 10);
     const engine = engineMocks.instances[0];
 
     await store.play();
@@ -328,7 +351,7 @@ describe("usePlayerStore", () => {
     engineMocks.behavior.startPromise = pendingStart.promise;
 
     const store = usePlayerStore();
-    await store.load(10);
+    await store.load(7, 7, 10);
     const engine = engineMocks.instances[0];
 
     const firstPlay = store.play();
@@ -347,7 +370,7 @@ describe("usePlayerStore", () => {
     engineMocks.behavior.startError = new Error("Audio context blocked");
 
     const store = usePlayerStore();
-    await store.load(10);
+    await store.load(7, 7, 10);
     const engine = engineMocks.instances[0];
 
     await store.play();
@@ -364,7 +387,7 @@ describe("usePlayerStore", () => {
     engineMocks.behavior.loadError = new Error("Network error");
 
     const store = usePlayerStore();
-    await store.load(10);
+    await store.load(7, 7, 10);
 
     expect(store.loadError).toBe("Network error");
     expect(store.controlsEnabled).toBe(false);
@@ -385,7 +408,7 @@ describe("usePlayerStore", () => {
     engineMocks.behavior.loadPromise = pendingLoad.promise;
 
     const store = usePlayerStore();
-    const loadPromise = store.load(10);
+    const loadPromise = store.load(7, 7, 10);
     await vi.waitFor(() => expect(engineMocks.instances).toHaveLength(1));
     const engine = engineMocks.instances[0];
 
@@ -403,7 +426,7 @@ describe("usePlayerStore", () => {
     vi.mocked(manifestApi.getSongManifest).mockResolvedValue(manifest);
 
     const store = usePlayerStore();
-    await store.load(10);
+    await store.load(7, 7, 10);
     const engine = engineMocks.instances[0];
     store.reset();
 

@@ -138,7 +138,7 @@ class ConversionService:
         self.validate_duration(metadata, targets, duration_tolerance_ms, stem)
 
         song_key = ensure_song_key(db, song, 0, is_original=True)
-        output_path = self.storage.key_asset_path(song.id, song_key.id, stem.id)
+        output_path = self.storage.key_asset_path(song.organization_id, song.id, song_key.id, stem.id)
         bitrate_kbps = bitrate_kbps_for_channels(
             metadata.channels,
             mono_bitrate_kbps=mono_bitrate_kbps,
@@ -270,7 +270,7 @@ class ConversionService:
             mono_bitrate_kbps=mono_bitrate_kbps,
             stereo_bitrate_kbps=stereo_bitrate_kbps,
         )
-        output_path = self.storage.key_asset_path(song.id, song_key.id, stem.id)
+        output_path = self.storage.key_asset_path(song.organization_id, song.id, song_key.id, stem.id)
         self.run_ffmpeg(
             source_path,
             output_path,

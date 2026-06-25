@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SongManifest } from "@/types/manifest";
-import { ToneAudioEngine } from "@/audio/ToneAudioEngine";
+import { AudioRequestError, ToneAudioEngine } from "@/audio/ToneAudioEngine";
 
 const toneMocks = vi.hoisted(() => ({
   players: [] as any[],
@@ -64,7 +64,7 @@ const manifest: SongManifest = {
       key: null,
       focusable: false,
       status: "ready",
-      url: "/media/songs/10/keys/100/stems/1.m4a",
+      url: "/media/organizations/7/songs/10/keys/100/stems/1.m4a",
       codec: "aac",
       container: "m4a",
       channels: 2,
@@ -81,7 +81,7 @@ const manifest: SongManifest = {
       key: 0,
       focusable: true,
       status: "ready",
-      url: "/media/songs/10/keys/100/stems/2.m4a",
+      url: "/media/organizations/7/songs/10/keys/100/stems/2.m4a",
       codec: "aac",
       container: "m4a",
       channels: 1,
@@ -125,10 +125,48 @@ describe("ToneAudioEngine", () => {
     await engine.loadManifest(manifest, progress);
 
     expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledWith(
+      "/media/organizations/7/songs/10/keys/100/stems/1.m4a",
+      expect.objectContaining({ credentials: "include" }),
+    );
     expect(toneMocks.Player).toHaveBeenCalledTimes(2);
     expect(toneMocks.Gain).toHaveBeenCalledTimes(2);
     expect(toneMocks.players[0].connect).toHaveBeenCalledWith(toneMocks.gains[0]);
     expect(progress).toHaveBeenCalledWith({ stemId: 1, loadedBytes: 4, totalBytes: 4, ratio: 1 });
+  });
+
+  it("exposes authorization failures from protected media", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: false,
+      status: 401,
+      headers: new Headers(),
+      body: null,
+    })));
+    const engine = new ToneAudioEngine();
+
+    await expect(engine.loadManifest(manifest, vi.fn())).rejects.toEqual(expect.objectContaining({
+      name: "AudioRequestError",
+      status: 401,
+    } satisfies Partial<AudioRequestError>));
+  });
+
+  it("aborts in-flight media requests when disposed", async () => {
+    let requestSignal: AbortSignal | undefined;
+    vi.stubGlobal("fetch", vi.fn((_url: string, init?: RequestInit) => {
+      requestSignal = init?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        requestSignal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+      });
+    }));
+    const engine = new ToneAudioEngine();
+
+    const loadPromise = engine.loadManifest(manifest, vi.fn());
+    await vi.waitFor(() => expect(requestSignal).toBeDefined());
+    engine.dispose();
+
+    expect(requestSignal?.aborted).toBe(true);
+    await expect(loadPromise).rejects.toMatchObject({ name: "AbortError" });
+    expect(toneMocks.Player).not.toHaveBeenCalled();
   });
 
   it("applies focus gain on top of per-stem gain", async () => {

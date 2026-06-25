@@ -14,7 +14,7 @@ from app.models.stem_key_asset import StemKeyAsset
 
 
 def create_song(client: TestClient) -> dict[str, Any]:
-    response = client.post("/api/songs", json={"title": "Conversion Song", "slug": "conversion-song"})
+    response = client.post(f"/api/organizations/{client.organization_id}/admin/songs", json={"title": "Conversion Song", "slug": "conversion-song"})
     assert response.status_code == 201
     return response.json()
 
@@ -42,7 +42,7 @@ def upload_stem(
     duration_ms: int = 500,
 ) -> dict[str, Any]:
     response = client.post(
-        f"/api/songs/{song_id}/stems/upload",
+        f"/api/organizations/{client.organization_id}/admin/songs/{song_id}/stems/upload",
         data={"name": name, "role": role},
         files={"file": (f"{name}.wav", wav_bytes(channels=channels, sample_rate=sample_rate, duration_ms=duration_ms), "audio/wav")},
     )
@@ -86,24 +86,24 @@ def test_conversion_jobs_convert_mono_and_stereo_to_m4a(client: TestClient) -> N
     mono_stem = upload_stem(client, song["id"], name="vocals", role="vocals", channels=1, sample_rate=48000)
     stereo_stem = upload_stem(client, song["id"], name="drums", role="drums", channels=2, sample_rate=48000)
 
-    create_response = client.post(f"/api/songs/{song['id']}/conversion-jobs", json={})
+    create_response = client.post(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/conversion-jobs", json={})
     assert create_response.status_code == 201
     job_ids = create_response.json()["jobIds"]
     assert len(job_ids) == 2
 
     process_jobs(client, job_ids)
 
-    jobs_response = client.get(f"/api/songs/{song['id']}/conversion-jobs")
+    jobs_response = client.get(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/conversion-jobs")
     assert jobs_response.status_code == 200
     assert {job["status"] for job in jobs_response.json()} == {"succeeded"}
 
-    song_response = client.get(f"/api/songs/{song['id']}")
+    song_response = client.get(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}")
     assert song_response.status_code == 200
     assert song_response.json()["status"] == "ready"
     assert song_response.json()["targetSampleRate"] == 48000
     assert song_response.json()["targetDurationMs"] == 500
 
-    stems_response = client.get(f"/api/songs/{song['id']}/stems")
+    stems_response = client.get(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/stems")
     assert stems_response.status_code == 200
     stems = {stem["id"]: stem for stem in stems_response.json()}
     assert stems[mono_stem["id"]]["status"] == "ready"
@@ -115,10 +115,14 @@ def test_conversion_jobs_convert_mono_and_stereo_to_m4a(client: TestClient) -> N
     assert stems[stereo_stem["id"]]["bitrateKbps"] == 160
 
     storage = client.storage  # type: ignore[attr-defined]
-    manifest = client.get(f"/api/songs/{song['id']}/manifest").json()
+    manifest = client.get(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/manifest").json()
     selected_key_id = manifest["selectedKeyId"]
-    mono_output = Path(storage.storage_root) / "songs" / str(song["id"]) / "keys" / str(selected_key_id) / f"{mono_stem['id']}.m4a"
-    stereo_output = Path(storage.storage_root) / "songs" / str(song["id"]) / "keys" / str(selected_key_id) / f"{stereo_stem['id']}.m4a"
+    mono_output = storage.key_asset_path(
+        client.organization_id, song["id"], selected_key_id, mono_stem["id"]  # type: ignore[attr-defined]
+    )
+    stereo_output = storage.key_asset_path(
+        client.organization_id, song["id"], selected_key_id, stereo_stem["id"]  # type: ignore[attr-defined]
+    )
     assert mono_output.is_file()
     assert stereo_output.is_file()
     assert first_audio_stream(probe_audio(mono_output))["channels"] == 1
@@ -129,18 +133,18 @@ def test_conversion_rejects_multichannel_input(client: TestClient) -> None:
     song = create_song(client)
     stem = upload_stem(client, song["id"], name="surround", channels=4)
 
-    create_response = client.post(f"/api/songs/{song['id']}/conversion-jobs", json={"stemIds": [stem["id"]]})
+    create_response = client.post(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/conversion-jobs", json={"stemIds": [stem["id"]]})
     assert create_response.status_code == 201
     job_id = create_response.json()["jobIds"][0]
 
     process_jobs(client, [job_id])
 
-    job_response = client.get(f"/api/conversion-jobs/{job_id}")
+    job_response = client.get(f"/api/organizations/{client.organization_id}/admin/conversion-jobs/{job_id}")
     assert job_response.status_code == 200
     assert job_response.json()["status"] == "failed"
     assert "mono and stereo" in job_response.json()["errorMessage"]
 
-    stems_response = client.get(f"/api/songs/{song['id']}/stems")
+    stems_response = client.get(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/stems")
     assert stems_response.status_code == 200
     converted_stem = stems_response.json()[0]
     assert converted_stem["status"] == "error"
@@ -152,11 +156,11 @@ def test_duration_difference_within_tolerance_is_normalized(client: TestClient) 
     long_stem = upload_stem(client, song["id"], name="reference", duration_ms=1000)
     short_stem = upload_stem(client, song["id"], name="short", duration_ms=930)
 
-    create_response = client.post(f"/api/songs/{song['id']}/conversion-jobs", json={})
+    create_response = client.post(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/conversion-jobs", json={})
     assert create_response.status_code == 201
     process_jobs(client, create_response.json()["jobIds"])
 
-    stems_response = client.get(f"/api/songs/{song['id']}/stems")
+    stems_response = client.get(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/stems")
     assert stems_response.status_code == 200
     stems = {stem["id"]: stem for stem in stems_response.json()}
     assert stems[long_stem["id"]]["status"] == "ready"
@@ -170,17 +174,17 @@ def test_duration_difference_over_tolerance_marks_stem_error(client: TestClient)
     upload_stem(client, song["id"], name="reference", duration_ms=1000)
     short_stem = upload_stem(client, song["id"], name="too-short", duration_ms=850)
 
-    create_response = client.post(f"/api/songs/{song['id']}/conversion-jobs", json={})
+    create_response = client.post(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/conversion-jobs", json={})
     assert create_response.status_code == 201
     process_jobs(client, create_response.json()["jobIds"])
 
-    stems_response = client.get(f"/api/songs/{song['id']}/stems")
+    stems_response = client.get(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/stems")
     assert stems_response.status_code == 200
     stems = {stem["id"]: stem for stem in stems_response.json()}
     assert stems[short_stem["id"]]["status"] == "error"
     assert "maximum allowed is 100 ms" in stems[short_stem["id"]]["errorMessage"]
 
-    song_response = client.get(f"/api/songs/{song['id']}")
+    song_response = client.get(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}")
     assert song_response.status_code == 200
     assert song_response.json()["status"] == "error"
 
@@ -197,7 +201,7 @@ def test_transpose_song_reuses_original_asset_for_keyless_stems(client: TestClie
         bass_stem.key = 0
         db.commit()
 
-    create_response = client.post(f"/api/songs/{song['id']}/conversion-jobs", json={})
+    create_response = client.post(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/conversion-jobs", json={})
     assert create_response.status_code == 201
     process_jobs(client, create_response.json()["jobIds"])
 
@@ -207,7 +211,7 @@ def test_transpose_song_reuses_original_asset_for_keyless_stems(client: TestClie
         drums_stem.source_path = str(Path(drums_stem.source_path or "").with_name("missing.wav"))
         db.commit()
 
-    transpose_response = client.post(f"/api/admin/songs/{song['id']}/transpose", json={"targetKeys": [2]})
+    transpose_response = client.post(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/transpose", json={"targetKeys": [2]})
     assert transpose_response.status_code == 200
     transpose_jobs = transpose_response.json()
     assert transpose_jobs["status"] == "queued"
@@ -218,7 +222,7 @@ def test_transpose_song_reuses_original_asset_for_keyless_stems(client: TestClie
 
     process_jobs(client, transpose_jobs["jobIds"])
 
-    job_response = client.get(f"/api/admin/conversion-jobs/{transpose_jobs['jobIds'][0]}")
+    job_response = client.get(f"/api/organizations/{client.organization_id}/admin/conversion-jobs/{transpose_jobs['jobIds'][0]}")
     assert job_response.status_code == 200
     job = job_response.json()
     assert job["jobType"] == "song_transposition"
@@ -228,14 +232,14 @@ def test_transpose_song_reuses_original_asset_for_keyless_stems(client: TestClie
     assert job["songKeyId"] is not None
     target_key = {"id": job["songKeyId"]}
 
-    manifest_response = client.get(f"/api/admin/songs/{song['id']}/manifest", params={"keyId": target_key["id"]})
+    manifest_response = client.get(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/manifest", params={"keyId": target_key["id"]})
     assert manifest_response.status_code == 200
     manifest = manifest_response.json()
     assert manifest["selectedKeyId"] == target_key["id"]
     assert manifest["playable"] is True
     stem_urls = {stem["id"]: stem["url"] for stem in manifest["stems"]}
     assert stem_urls[bass["id"]].startswith(
-        f"/media/songs/{song['id']}/keys/{target_key['id']}/stems/{bass['id']}.m4a?v="
+        f"/media/organizations/{client.organization_id}/songs/{song['id']}/keys/{target_key['id']}/stems/{bass['id']}.m4a?v="
     )
 
     storage = client.storage  # type: ignore[attr-defined]
@@ -246,14 +250,18 @@ def test_transpose_song_reuses_original_asset_for_keyless_stems(client: TestClie
         target_drums_asset = db.query(StemKeyAsset).filter_by(song_key_id=target_key_model.id, stem_id=drums["id"]).one_or_none()
         target_bass_asset = db.query(StemKeyAsset).filter_by(song_key_id=target_key_model.id, stem_id=bass["id"]).one()
         assert stem_urls[drums["id"]].startswith(
-            f"/media/songs/{song['id']}/keys/{original_key.id}/stems/{drums['id']}.m4a?v="
+            f"/media/organizations/{client.organization_id}/songs/{song['id']}/keys/{original_key.id}/stems/{drums['id']}.m4a?v="
         )
         assert target_drums_asset is None
         assert original_drums_asset.file_path is not None
-        assert target_bass_asset.file_path == str(storage.key_asset_path(song["id"], target_key_model.id, bass["id"]))
+        assert target_bass_asset.file_path == str(
+            storage.key_asset_path(
+                client.organization_id, song["id"], target_key_model.id, bass["id"]  # type: ignore[attr-defined]
+            )
+        )
         assert Path(target_bass_asset.file_path).is_file()
 
-    inventory_response = client.get(f"/api/admin/songs/{song['id']}/key-assets")
+    inventory_response = client.get(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/key-assets")
     assert inventory_response.status_code == 200
     inventory = {item["stemId"]: item for item in inventory_response.json()}
     assert inventory[drums["id"]]["variants"] == []
@@ -273,7 +281,7 @@ def test_transpose_job_fails_when_keyless_original_asset_is_missing(client: Test
         bass_stem.key = 0
         db.commit()
 
-    create_response = client.post(f"/api/songs/{song['id']}/conversion-jobs", json={})
+    create_response = client.post(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/conversion-jobs", json={})
     process_jobs(client, create_response.json()["jobIds"])
 
     with session_factory() as db:
@@ -282,11 +290,11 @@ def test_transpose_job_fails_when_keyless_original_asset_is_missing(client: Test
         db.delete(original_asset)
         db.commit()
 
-    transpose_response = client.post(f"/api/admin/songs/{song['id']}/transpose", json={"targetKeys": [2]})
+    transpose_response = client.post(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/transpose", json={"targetKeys": [2]})
     job_id = transpose_response.json()["jobIds"][0]
     process_jobs(client, [job_id])
 
-    job = client.get(f"/api/admin/conversion-jobs/{job_id}").json()
+    job = client.get(f"/api/organizations/{client.organization_id}/admin/conversion-jobs/{job_id}").json()
     assert job["status"] == "failed"
     assert job["errorMessage"] == f"Original asset missing for key-independent stem {drums['id']}"
 
@@ -302,9 +310,9 @@ def test_converting_keyless_stem_recalculates_existing_key_variants(client: Test
         bass_stem.key = 0
         db.commit()
 
-    create_response = client.post(f"/api/songs/{song['id']}/conversion-jobs", json={"stemIds": [bass["id"]]})
+    create_response = client.post(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/conversion-jobs", json={"stemIds": [bass["id"]]})
     process_jobs(client, create_response.json()["jobIds"])
-    transpose_response = client.post(f"/api/admin/songs/{song['id']}/transpose", json={"targetKeys": [2]})
+    transpose_response = client.post(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/transpose", json={"targetKeys": [2]})
     process_jobs(client, transpose_response.json()["jobIds"])
 
     drums = upload_stem(client, song["id"], name="drums", role="drums", channels=2, sample_rate=48000)
@@ -315,7 +323,7 @@ def test_converting_keyless_stem_recalculates_existing_key_variants(client: Test
         target_key_id = target_key.id
 
     drums_response = client.post(
-        f"/api/songs/{song['id']}/conversion-jobs",
+        f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/conversion-jobs",
         json={"stemIds": [drums["id"]]},
     )
     process_jobs(client, drums_response.json()["jobIds"])
@@ -326,7 +334,7 @@ def test_converting_keyless_stem_recalculates_existing_key_variants(client: Test
         assert target_key.status == "ready"
         assert db.query(StemKeyAsset).filter_by(song_key_id=target_key_id, stem_id=drums["id"]).one_or_none() is None
 
-    manifest = client.get(f"/api/admin/songs/{song['id']}/manifest", params={"keyId": target_key_id}).json()
+    manifest = client.get(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/manifest", params={"keyId": target_key_id}).json()
     drums_manifest = next(stem for stem in manifest["stems"] if stem["id"] == drums["id"])
     assert drums_manifest["url"] is not None
 
@@ -342,11 +350,11 @@ def test_transpose_job_failure_marks_job_and_song_key_error(client: TestClient) 
         bass_stem.key = 0
         db.commit()
 
-    create_response = client.post(f"/api/songs/{song['id']}/conversion-jobs", json={})
+    create_response = client.post(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/conversion-jobs", json={})
     assert create_response.status_code == 201
     process_jobs(client, create_response.json()["jobIds"])
 
-    transpose_response = client.post(f"/api/admin/songs/{song['id']}/transpose", json={"targetKeys": [2]})
+    transpose_response = client.post(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/transpose", json={"targetKeys": [2]})
     assert transpose_response.status_code == 200
     job_id = transpose_response.json()["jobIds"][0]
 
@@ -358,7 +366,7 @@ def test_transpose_job_failure_marks_job_and_song_key_error(client: TestClient) 
 
     process_jobs(client, [job_id])
 
-    job_response = client.get(f"/api/admin/conversion-jobs/{job_id}")
+    job_response = client.get(f"/api/organizations/{client.organization_id}/admin/conversion-jobs/{job_id}")
     assert job_response.status_code == 200
     failed_job = job_response.json()
     assert failed_job["status"] == "failed"
@@ -375,21 +383,21 @@ def test_transpose_job_failure_marks_job_and_song_key_error(client: TestClient) 
 def test_original_key_change_relabels_relative_key_variants_without_reprocessing(client: TestClient) -> None:
     song = create_song(client)
     upload_stem(client, song["id"], name="drums", role="drums", channels=2, sample_rate=48000)
-    create_response = client.post(f"/api/songs/{song['id']}/conversion-jobs", json={})
+    create_response = client.post(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/conversion-jobs", json={})
     assert create_response.status_code == 201
     process_jobs(client, create_response.json()["jobIds"])
 
-    transpose_response = client.post(f"/api/admin/songs/{song['id']}/transpose", json={"targetKeys": [2]})
+    transpose_response = client.post(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/transpose", json={"targetKeys": [2]})
     assert transpose_response.status_code == 200
     transpose_job_id = transpose_response.json()["jobIds"][0]
     process_jobs(client, [transpose_job_id])
-    target_variant = client.get(f"/api/admin/conversion-jobs/{transpose_job_id}").json()
+    target_variant = client.get(f"/api/organizations/{client.organization_id}/admin/conversion-jobs/{transpose_job_id}").json()
 
-    update_response = client.patch(f"/api/admin/songs/{song['id']}", json={"originalKey": 5})
+    update_response = client.patch(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}", json={"originalKey": 5})
     assert update_response.status_code == 200
     assert update_response.json()["originalKey"] == 5
 
-    manifest_response = client.get(f"/api/admin/songs/{song['id']}/manifest", params={"keyId": target_variant["songKeyId"]})
+    manifest_response = client.get(f"/api/organizations/{client.organization_id}/admin/songs/{song['id']}/manifest", params={"keyId": target_variant["songKeyId"]})
     assert manifest_response.status_code == 200
     manifest = manifest_response.json()
     variants = {variant["id"]: variant for variant in manifest["keyVariants"]}

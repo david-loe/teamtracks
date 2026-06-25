@@ -6,38 +6,38 @@ from app.api.songs import get_song_or_404
 from app.db.session import get_db
 from app.domain import ConversionJobStatus, ConversionJobType, StemStatus
 from app.models.conversion_job import ConversionJob
+from app.models.song import Song
 from app.models.stem import Stem
 from app.schemas.conversion_job import ConversionJobBatchRead, ConversionJobCreate, ConversionJobRead
-from app.services.auth import require_admin_session
+from app.services.auth import require_organization_admin_access
 from app.services.settings import get_or_create_app_settings
 
 
-router = APIRouter(tags=["admin-conversion-jobs"], dependencies=[Depends(require_admin_session)])
-
-
-@router.post(
-    "/api/songs/{song_id}/conversion-jobs",
-    response_model=ConversionJobBatchRead,
-    status_code=status.HTTP_201_CREATED,
-    include_in_schema=False,
+router = APIRouter(
+    prefix="/api/organizations/{organization_id}/admin",
+    tags=["admin-conversion-jobs"],
+    dependencies=[Depends(require_organization_admin_access)],
 )
+
+
 @router.post(
-    "/api/admin/songs/{song_id}/conversion-jobs",
+    "/songs/{song_id}/conversion-jobs",
     response_model=ConversionJobBatchRead,
     status_code=status.HTTP_201_CREATED,
 )
 def create_conversion_jobs(
+    organization_id: int,
     song_id: int,
     payload: ConversionJobCreate | None = None,
     db: Session = Depends(get_db),
 ) -> ConversionJobBatchRead:
-    get_song_or_404(db, song_id)
+    get_song_or_404(db, organization_id, song_id)
     payload = payload or ConversionJobCreate()
     stems = _select_stems_for_jobs(db, song_id, payload.stem_ids)
     if not stems:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No stems available for conversion")
 
-    settings = get_or_create_app_settings(db)
+    settings = get_or_create_app_settings(db, organization_id)
     jobs = [
         ConversionJob(
             song_id=song_id,
@@ -63,19 +63,21 @@ def create_conversion_jobs(
     )
 
 
-@router.get("/api/conversion-jobs/{job_id}", response_model=ConversionJobRead, include_in_schema=False)
-@router.get("/api/admin/conversion-jobs/{job_id}", response_model=ConversionJobRead)
-def get_conversion_job(job_id: int, db: Session = Depends(get_db)) -> ConversionJob:
-    job = db.get(ConversionJob, job_id)
+@router.get("/conversion-jobs/{job_id}", response_model=ConversionJobRead)
+def get_conversion_job(organization_id: int, job_id: int, db: Session = Depends(get_db)) -> ConversionJob:
+    job = db.scalar(
+        select(ConversionJob)
+        .join(ConversionJob.song)
+        .where(ConversionJob.id == job_id, Song.organization_id == organization_id)
+    )
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversion job not found")
     return job
 
 
-@router.get("/api/songs/{song_id}/conversion-jobs", response_model=list[ConversionJobRead], include_in_schema=False)
-@router.get("/api/admin/songs/{song_id}/conversion-jobs", response_model=list[ConversionJobRead])
-def list_conversion_jobs(song_id: int, db: Session = Depends(get_db)) -> list[ConversionJob]:
-    get_song_or_404(db, song_id)
+@router.get("/songs/{song_id}/conversion-jobs", response_model=list[ConversionJobRead])
+def list_conversion_jobs(organization_id: int, song_id: int, db: Session = Depends(get_db)) -> list[ConversionJob]:
+    get_song_or_404(db, organization_id, song_id)
     return list(
         db.scalars(
             select(ConversionJob)

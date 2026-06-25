@@ -51,7 +51,7 @@ describe("useSongsStore", () => {
     vi.mocked(songsApi.listSongs).mockResolvedValue(songList);
 
     const store = useSongsStore();
-    await store.fetchSongs();
+    await store.fetchSongs(7);
 
     expect(store.songs).toEqual(songList);
     expect(store.hasSongs).toBe(true);
@@ -62,7 +62,7 @@ describe("useSongsStore", () => {
     vi.mocked(songsApi.getSong).mockRejectedValue(new Error("not found"));
 
     const store = useSongsStore();
-    await store.fetchSong(404);
+    await store.fetchSong(7, 404);
 
     expect(store.currentSong).toBeNull();
     expect(store.error).toBe("not found");
@@ -73,7 +73,7 @@ describe("useSongsStore", () => {
     vi.mocked(songsApi.listSongs).mockResolvedValue(songList);
 
     const store = useSongsStore();
-    const created = await store.createSong({ title: "First Song", artist: "First Artist", slug: "first-song", originalKey: 0 });
+    const created = await store.createSong(7, { title: "First Song", artist: "First Artist", slug: "first-song", originalKey: 0 });
 
     expect(created).toEqual(song);
     expect(songsApi.listSongs).toHaveBeenCalledTimes(1);
@@ -88,7 +88,7 @@ describe("useSongsStore", () => {
     ]);
 
     const store = useSongsStore();
-    const updated = await store.updateSong(1, {
+    const updated = await store.updateSong(7, 1, {
       title: "Updated Song",
       artist: "Updated Artist",
       originalKey: 5,
@@ -105,8 +105,8 @@ describe("useSongsStore", () => {
     vi.mocked(songsApi.deleteSong).mockResolvedValue(undefined);
 
     const store = useSongsStore();
-    await store.fetchSongs();
-    const deleted = await store.deleteSong(1);
+    await store.fetchSongs(7);
+    const deleted = await store.deleteSong(7, 1);
 
     expect(deleted).toBe(true);
     expect(store.songs).toEqual([]);

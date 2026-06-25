@@ -36,11 +36,11 @@ export type StemUploadResult =
   | { input: StemUploadInput; stem: Stem; error: null }
   | { input: StemUploadInput; stem: null; error: string };
 
-export function listStems(songId: number): Promise<Stem[]> {
-  return apiRequest<Stem[]>(`/api/admin/songs/${songId}/stems`);
+export function listStems(organizationId: number, songId: number): Promise<Stem[]> {
+  return apiRequest<Stem[]>(`/api/organizations/${organizationId}/admin/songs/${songId}/stems`);
 }
 
-export function uploadStem(songId: number, input: StemUploadInput): Promise<Stem> {
+export function uploadStem(organizationId: number, songId: number, input: StemUploadInput): Promise<Stem> {
   const formData = new FormData();
   formData.set("name", input.name);
   formData.set("role", input.role);
@@ -49,12 +49,12 @@ export function uploadStem(songId: number, input: StemUploadInput): Promise<Stem
   }
   formData.set("file", input.file);
 
-  return apiRequest<Stem>(`/api/admin/songs/${songId}/stems/upload`, {
+  return apiRequest<Stem>(`/api/organizations/${organizationId}/admin/songs/${songId}/stems/upload`, {
     method: "POST",
     body: formData,
   });
 }
 
-export function deleteStem(stemId: number): Promise<void> {
-  return apiRequest<void>(`/api/admin/stems/${stemId}`, { method: "DELETE" });
+export function deleteStem(organizationId: number, stemId: number): Promise<void> {
+  return apiRequest<void>(`/api/organizations/${organizationId}/admin/stems/${stemId}`, { method: "DELETE" });
 }

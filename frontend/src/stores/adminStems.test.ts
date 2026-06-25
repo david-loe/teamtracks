@@ -92,7 +92,7 @@ describe("useAdminStemsStore", () => {
     vi.mocked(stemsApi.listStems).mockResolvedValue([uploadedStem, readyStem]);
 
     const store = useAdminStemsStore();
-    await store.load(10);
+    await store.load(7, 10);
 
     expect(store.stems).toEqual([uploadedStem, readyStem]);
     expect(store.convertibleStems).toEqual([uploadedStem]);
@@ -105,8 +105,8 @@ describe("useAdminStemsStore", () => {
 
     const file = new File(["wav"], "drums.wav", { type: "audio/wav" });
     const store = useAdminStemsStore();
-    await store.load(10);
-    const ok = await store.upload(10, { name: "Drums", role: "drums", key: null, file });
+    await store.load(7, 10);
+    const ok = await store.upload(7, 10, { name: "Drums", role: "drums", key: null, file });
 
     expect(ok).toBe(true);
     expect(store.stems).toEqual([readyStem, uploadedStem]);
@@ -128,7 +128,7 @@ describe("useAdminStemsStore", () => {
       { name: "Bass", role: "bass" as const, key: 0, file: new File(["three"], "bass.wav") },
     ];
     const store = useAdminStemsStore();
-    const resultPromise = store.uploadMany(10, inputs);
+    const resultPromise = store.uploadMany(7, 10, inputs);
 
     expect(store.uploading).toBe(true);
     expect(stemsApi.uploadStem).toHaveBeenCalledTimes(1);
@@ -137,7 +137,7 @@ describe("useAdminStemsStore", () => {
     const results = await resultPromise;
 
     expect(stemsApi.uploadStem).toHaveBeenCalledTimes(3);
-    expect(vi.mocked(stemsApi.uploadStem).mock.calls.map((call) => call[1])).toEqual(inputs);
+    expect(vi.mocked(stemsApi.uploadStem).mock.calls.map((call) => call[2])).toEqual(inputs);
     expect(results).toEqual([
       { input: inputs[0], stem: uploadedStem, error: null },
       { input: inputs[1], stem: null, error: "Second upload failed" },
@@ -153,10 +153,10 @@ describe("useAdminStemsStore", () => {
     vi.mocked(conversionApi.listConversionJobs).mockResolvedValue([runningJob]);
 
     const store = useAdminStemsStore();
-    const ok = await store.startConversion(10);
+    const ok = await store.startConversion(7, 10);
 
     expect(ok).toBe(true);
-    expect(conversionApi.createConversionJobs).toHaveBeenCalledWith(10, { requestedBy: "admin-ui" });
+    expect(conversionApi.createConversionJobs).toHaveBeenCalledWith(7, 10, { requestedBy: "admin-ui" });
     expect(store.stems).toEqual([uploadedStem]);
     expect(store.jobs).toEqual([runningJob]);
     store.reset();
@@ -168,9 +168,9 @@ describe("useAdminStemsStore", () => {
     vi.mocked(stemsApi.deleteStem).mockResolvedValue(undefined);
 
     const store = useAdminStemsStore();
-    await store.load(10);
-    await store.loadJobs(10);
-    const ok = await store.removeStem(1);
+    await store.load(7, 10);
+    await store.loadJobs(7, 10);
+    const ok = await store.removeStem(7, 1);
 
     expect(ok).toBe(true);
     expect(store.stems).toEqual([]);
@@ -183,11 +183,11 @@ describe("useAdminStemsStore", () => {
     vi.mocked(conversionApi.listConversionJobs).mockResolvedValue([]);
 
     const store = useAdminStemsStore();
-    await store.load(10);
-    const ok = await store.reconvert(10);
+    await store.load(7, 10);
+    const ok = await store.reconvert(7, 10);
 
     expect(ok).toBe(true);
-    expect(conversionApi.createConversionJobs).toHaveBeenCalledWith(10, {
+    expect(conversionApi.createConversionJobs).toHaveBeenCalledWith(7, 10, {
       stemIds: [1, 2],
       requestedBy: "admin-ui-reconvert",
     });
@@ -207,12 +207,12 @@ describe("useAdminStemsStore", () => {
     ]);
 
     const store = useAdminStemsStore();
-    const ok = await store.transpose(10, [2]);
+    const ok = await store.transpose(7, 10, [2]);
 
     expect(ok).toBe(true);
-    expect(transpositionApi.transposeSong).toHaveBeenCalledWith(10, { targetKeys: [2] });
-    expect(conversionApi.listConversionJobs).toHaveBeenCalledWith(10);
-    expect(transpositionApi.listKeyAssets).toHaveBeenCalledWith(10);
+    expect(transpositionApi.transposeSong).toHaveBeenCalledWith(7, 10, { targetKeys: [2] });
+    expect(conversionApi.listConversionJobs).toHaveBeenCalledWith(7, 10);
+    expect(transpositionApi.listKeyAssets).toHaveBeenCalledWith(7, 10);
     expect(store.transposeError).toBeNull();
     store.reset();
   });

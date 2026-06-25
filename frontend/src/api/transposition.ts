@@ -32,10 +32,10 @@ export interface StemKeyAssetInventoryItem {
   variants: StemKeyAssetVariant[];
 }
 
-export function transposeSong(songId: number, input: TransposeSongInput): Promise<ConversionJobBatch> {
-  return apiJson<ConversionJobBatch>(`/api/admin/songs/${songId}/transpose`, input);
+export function transposeSong(organizationId: number, songId: number, input: TransposeSongInput): Promise<ConversionJobBatch> {
+  return apiJson<ConversionJobBatch>(`/api/organizations/${organizationId}/admin/songs/${songId}/transpose`, input);
 }
 
-export function listKeyAssets(songId: number): Promise<StemKeyAssetInventoryItem[]> {
-  return apiRequest<StemKeyAssetInventoryItem[]>(`/api/admin/songs/${songId}/key-assets`);
+export function listKeyAssets(organizationId: number, songId: number): Promise<StemKeyAssetInventoryItem[]> {
+  return apiRequest<StemKeyAssetInventoryItem[]>(`/api/organizations/${organizationId}/admin/songs/${songId}/key-assets`);
 }

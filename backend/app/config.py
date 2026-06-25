@@ -5,18 +5,29 @@ from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+ORGANIZATION_SESSION_MAX_AGE_SECONDS = 2 * 365 * 24 * 60 * 60
+
+
 class Settings(BaseSettings):
     app_name: str = "TeamTracks"
     database_url: str = Field(default="sqlite:////data/db/teamtracks.db", validation_alias="DATABASE_URL")
     storage_root: Path = Field(default=Path("/data/storage"), validation_alias="STORAGE_ROOT")
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
-    admin_password: SecretStr = Field(default=SecretStr("change-me"), validation_alias="ADMIN_PASSWORD")
-    admin_session_secret: SecretStr = Field(
-        default=SecretStr("development-session-secret-change-me"),
-        validation_alias="ADMIN_SESSION_SECRET",
+    platform_admin_password: SecretStr = Field(
+        default=SecretStr("change-me"),
+        validation_alias="PLATFORM_ADMIN_PASSWORD",
     )
-    admin_session_hours: int = Field(default=12, validation_alias="ADMIN_SESSION_HOURS", ge=1, le=720)
-    admin_cookie_secure: bool = Field(default=False, validation_alias="ADMIN_COOKIE_SECURE")
+    auth_secret: SecretStr = Field(
+        default=SecretStr("development-auth-secret-change-me"),
+        validation_alias="AUTH_SECRET",
+    )
+    platform_admin_session_hours: int = Field(
+        default=12,
+        validation_alias="PLATFORM_ADMIN_SESSION_HOURS",
+        ge=1,
+        le=720,
+    )
+    cookie_secure: bool = Field(default=False, validation_alias="COOKIE_SECURE")
     stem_cache_max_age_seconds: int = Field(
         default=315_360_000,
         validation_alias="STEM_CACHE_MAX_AGE_SECONDS",

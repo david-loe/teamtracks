@@ -102,7 +102,7 @@ describe("SongAdminView", () => {
 
   it("leaves available keys empty for key-independent stems", async () => {
     const wrapper = mount(SongAdminView, {
-      props: { id: "10" },
+      props: { organizationId: "7", id: "10" },
       global: {
         stubs: {
           RouterLink: { template: "<a><slot /></a>" },

@@ -15,11 +15,11 @@ export const useSongsStore = defineStore("songs", () => {
 
   const hasSongs = computed(() => songs.value.length > 0);
 
-  async function fetchSongs(): Promise<void> {
+  async function fetchSongs(organizationId: number): Promise<void> {
     loading.value = true;
     error.value = null;
     try {
-      songs.value = await songsApi.listSongs();
+      songs.value = await songsApi.listSongs(organizationId);
     } catch (err) {
       error.value = getErrorMessage(err);
     } finally {
@@ -27,11 +27,11 @@ export const useSongsStore = defineStore("songs", () => {
     }
   }
 
-  async function fetchSong(songId: number): Promise<void> {
+  async function fetchSong(organizationId: number, songId: number): Promise<void> {
     loadingCurrent.value = true;
     error.value = null;
     try {
-      currentSong.value = await songsApi.getSong(songId);
+      currentSong.value = await songsApi.getSong(organizationId, songId);
     } catch (err) {
       currentSong.value = null;
       error.value = getErrorMessage(err);
@@ -40,12 +40,12 @@ export const useSongsStore = defineStore("songs", () => {
     }
   }
 
-  async function createSong(input: SongCreateInput): Promise<Song | null> {
+  async function createSong(organizationId: number, input: SongCreateInput): Promise<Song | null> {
     saving.value = true;
     error.value = null;
     try {
-      const song = await songsApi.createSong(input);
-      await fetchSongs();
+      const song = await songsApi.createSong(organizationId, input);
+      await fetchSongs(organizationId);
       return song;
     } catch (err) {
       error.value = getErrorMessage(err);
@@ -55,13 +55,13 @@ export const useSongsStore = defineStore("songs", () => {
     }
   }
 
-  async function updateSong(songId: number, input: SongUpdateInput): Promise<Song | null> {
+  async function updateSong(organizationId: number, songId: number, input: SongUpdateInput): Promise<Song | null> {
     saving.value = true;
     error.value = null;
     try {
-      const song = await songsApi.updateSong(songId, input);
+      const song = await songsApi.updateSong(organizationId, songId, input);
       currentSong.value = song;
-      await fetchSongs();
+      await fetchSongs(organizationId);
       return song;
     } catch (err) {
       error.value = getErrorMessage(err);
@@ -71,11 +71,11 @@ export const useSongsStore = defineStore("songs", () => {
     }
   }
 
-  async function deleteSong(songId: number): Promise<boolean> {
+  async function deleteSong(organizationId: number, songId: number): Promise<boolean> {
     deletingId.value = songId;
     error.value = null;
     try {
-      await songsApi.deleteSong(songId);
+      await songsApi.deleteSong(organizationId, songId);
       songs.value = songs.value.filter((song) => song.id !== songId);
       if (currentSong.value?.id === songId) {
         currentSong.value = null;
@@ -90,6 +90,12 @@ export const useSongsStore = defineStore("songs", () => {
   }
 
   function clearError(): void {
+    error.value = null;
+  }
+
+  function reset(): void {
+    songs.value = [];
+    currentSong.value = null;
     error.value = null;
   }
 
@@ -108,6 +114,7 @@ export const useSongsStore = defineStore("songs", () => {
     updateSong,
     deleteSong,
     clearError,
+    reset,
   };
 });
 

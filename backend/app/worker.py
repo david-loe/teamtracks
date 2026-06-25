@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.db.session import SessionLocal
 from app.domain import ConversionJobStatus
 from app.models.conversion_job import ConversionJob
+from app.models.song import Song
 from app.services.conversion import ConversionService
 from app.services.storage import StorageService
 
@@ -21,6 +22,7 @@ def process_next_job(conversion_service: ConversionService) -> bool:
     with SessionLocal() as db:
         job = db.scalar(
             select(ConversionJob)
+            .join(Song, ConversionJob.song_id == Song.id)
             .where(ConversionJob.status == ConversionJobStatus.QUEUED.value)
             .order_by(ConversionJob.created_at.asc(), ConversionJob.id.asc())
         )

@@ -42,29 +42,29 @@ export interface SongListItem {
   durationMs: number | null;
 }
 
-export function listSongs(): Promise<SongListItem[]> {
-  return apiRequest<SongListItem[]>("/api/admin/songs");
+export function listSongs(organizationId: number): Promise<SongListItem[]> {
+  return apiRequest<SongListItem[]>(`/api/organizations/${organizationId}/admin/songs`);
 }
 
-export function listPublicSongs(query = ""): Promise<SongListItem[]> {
+export function listPublicSongs(organizationId: number, query = ""): Promise<SongListItem[]> {
   const params = new URLSearchParams();
   if (query.trim()) params.set("query", query.trim());
   const suffix = params.size ? `?${params}` : "";
-  return apiRequest<SongListItem[]>(`/api/public/songs${suffix}`);
+  return apiRequest<SongListItem[]>(`/api/organizations/${organizationId}/songs${suffix}`);
 }
 
-export function createSong(input: SongCreateInput): Promise<Song> {
-  return apiJson<Song>("/api/admin/songs", input);
+export function createSong(organizationId: number, input: SongCreateInput): Promise<Song> {
+  return apiJson<Song>(`/api/organizations/${organizationId}/admin/songs`, input);
 }
 
-export function getSong(songId: number): Promise<Song> {
-  return apiRequest<Song>(`/api/admin/songs/${songId}`);
+export function getSong(organizationId: number, songId: number): Promise<Song> {
+  return apiRequest<Song>(`/api/organizations/${organizationId}/admin/songs/${songId}`);
 }
 
-export function updateSong(songId: number, input: SongUpdateInput): Promise<Song> {
-  return apiJson<Song>(`/api/admin/songs/${songId}`, input, { method: "PATCH" });
+export function updateSong(organizationId: number, songId: number, input: SongUpdateInput): Promise<Song> {
+  return apiJson<Song>(`/api/organizations/${organizationId}/admin/songs/${songId}`, input, { method: "PATCH" });
 }
 
-export function deleteSong(songId: number): Promise<void> {
-  return apiRequest<void>(`/api/admin/songs/${songId}`, { method: "DELETE" });
+export function deleteSong(organizationId: number, songId: number): Promise<void> {
+  return apiRequest<void>(`/api/organizations/${organizationId}/admin/songs/${songId}`, { method: "DELETE" });
 }

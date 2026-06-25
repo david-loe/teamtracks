@@ -6,6 +6,7 @@ import { formatDuration } from "@/types/format";
 import { formatSongKey } from "@/types/keys";
 
 defineProps<{
+  organizationId: number;
   songs: SongListItem[];
   deletingId: number | null;
 }>();
@@ -39,8 +40,8 @@ defineEmits<{
           <td>{{ song.readyStemCount }} / {{ song.stemCount }} ready</td>
           <td>{{ formatDuration(song.durationMs) }}</td>
           <td class="actions-cell">
-            <RouterLink class="button button-secondary" :to="`/admin/songs/${song.id}`">Verwalten</RouterLink>
-            <RouterLink v-if="song.status === 'ready'" class="button button-secondary" :to="`/songs/${song.id}`">Player</RouterLink>
+            <RouterLink class="button button-secondary" :to="`/org/${organizationId}/admin/songs/${song.id}`">Verwalten</RouterLink>
+            <RouterLink v-if="song.status === 'ready'" class="button button-secondary" :to="`/org/${organizationId}/songs/${song.id}`">Player</RouterLink>
             <button
               class="button button-danger"
               type="button"

@@ -26,6 +26,7 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
   const jobError = ref<string | null>(null);
   const transposeError = ref<string | null>(null);
   const pollingSongId = ref<number | null>(null);
+  const pollingOrganizationId = ref<number | null>(null);
   let pollTimer: number | null = null;
 
   const activeJobs = computed(() => jobs.value.filter((job) => ACTIVE_JOB_STATUSES.has(job.status)));
@@ -37,11 +38,11 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     stems.value.filter((stem) => stem.status === "uploaded" || stem.status === "error"),
   );
 
-  async function load(songId: number): Promise<void> {
+  async function load(organizationId: number, songId: number): Promise<void> {
     loading.value = true;
     error.value = null;
     try {
-      stems.value = await stemsApi.listStems(songId);
+      stems.value = await stemsApi.listStems(organizationId, songId);
     } catch (err) {
       error.value = getErrorMessage(err);
     } finally {
@@ -49,13 +50,13 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     }
   }
 
-  async function loadJobs(songId: number): Promise<void> {
+  async function loadJobs(organizationId: number, songId: number): Promise<void> {
     loadingJobs.value = true;
     jobError.value = null;
     try {
-      jobs.value = await conversionApi.listConversionJobs(songId);
+      jobs.value = await conversionApi.listConversionJobs(organizationId, songId);
       if (hasActiveJobs.value) {
-        startPolling(songId);
+        startPolling(organizationId, songId);
       } else {
         stopPolling();
       }
@@ -66,10 +67,10 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     }
   }
 
-  async function loadKeyAssets(songId: number): Promise<void> {
+  async function loadKeyAssets(organizationId: number, songId: number): Promise<void> {
     loadingKeyAssets.value = true;
     try {
-      keyAssets.value = await transpositionApi.listKeyAssets(songId);
+      keyAssets.value = await transpositionApi.listKeyAssets(organizationId, songId);
     } catch (err) {
       transposeError.value = getErrorMessage(err);
     } finally {
@@ -77,11 +78,11 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     }
   }
 
-  async function upload(songId: number, input: StemUploadInput): Promise<boolean> {
+  async function upload(organizationId: number, songId: number, input: StemUploadInput): Promise<boolean> {
     uploading.value = true;
     error.value = null;
     try {
-      const stem = await stemsApi.uploadStem(songId, input);
+      const stem = await stemsApi.uploadStem(organizationId, songId, input);
       stems.value = [...stems.value, stem];
       return true;
     } catch (err) {
@@ -92,14 +93,14 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     }
   }
 
-  async function uploadMany(songId: number, inputs: StemUploadInput[]): Promise<StemUploadResult[]> {
+  async function uploadMany(organizationId: number, songId: number, inputs: StemUploadInput[]): Promise<StemUploadResult[]> {
     uploading.value = true;
     error.value = null;
     const results: StemUploadResult[] = [];
     try {
       for (const input of inputs) {
         try {
-          const stem = await stemsApi.uploadStem(songId, input);
+          const stem = await stemsApi.uploadStem(organizationId, songId, input);
           stems.value = [...stems.value, stem];
           results.push({ input, stem, error: null });
         } catch (err) {
@@ -112,11 +113,11 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     }
   }
 
-  async function removeStem(stemId: number): Promise<boolean> {
+  async function removeStem(organizationId: number, stemId: number): Promise<boolean> {
     deletingId.value = stemId;
     error.value = null;
     try {
-      await stemsApi.deleteStem(stemId);
+      await stemsApi.deleteStem(organizationId, stemId);
       stems.value = stems.value.filter((stem) => stem.id !== stemId);
       jobs.value = jobs.value.filter((job) => job.stemId !== stemId);
       return true;
@@ -128,13 +129,17 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     }
   }
 
-  async function startConversion(songId: number): Promise<boolean> {
+  async function startConversion(organizationId: number, songId: number): Promise<boolean> {
     startingConversion.value = true;
     jobError.value = null;
     try {
-      await conversionApi.createConversionJobs(songId, { requestedBy: "admin-ui" });
-      await Promise.all([load(songId), loadJobs(songId), loadKeyAssets(songId)]);
-      startPolling(songId);
+      await conversionApi.createConversionJobs(organizationId, songId, { requestedBy: "admin-ui" });
+      await Promise.all([
+        load(organizationId, songId),
+        loadJobs(organizationId, songId),
+        loadKeyAssets(organizationId, songId),
+      ]);
+      startPolling(organizationId, songId);
       return true;
     } catch (err) {
       jobError.value = getErrorMessage(err);
@@ -144,15 +149,18 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     }
   }
 
-  async function reconvert(songId: number): Promise<boolean> {
+  async function reconvert(organizationId: number, songId: number): Promise<boolean> {
     const stemIds = stems.value.filter((stem) => stem.sourceFilename !== null).map((stem) => stem.id);
     if (stemIds.length === 0) return false;
     startingConversion.value = true;
     jobError.value = null;
     try {
-      await conversionApi.createConversionJobs(songId, { stemIds, requestedBy: "admin-ui-reconvert" });
-      await Promise.all([loadJobs(songId), loadKeyAssets(songId)]);
-      startPolling(songId);
+      await conversionApi.createConversionJobs(organizationId, songId, {
+        stemIds,
+        requestedBy: "admin-ui-reconvert",
+      });
+      await Promise.all([loadJobs(organizationId, songId), loadKeyAssets(organizationId, songId)]);
+      startPolling(organizationId, songId);
       return true;
     } catch (err) {
       jobError.value = getErrorMessage(err);
@@ -162,13 +170,13 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     }
   }
 
-  async function transpose(songId: number, targetKeys: number[]): Promise<boolean> {
+  async function transpose(organizationId: number, songId: number, targetKeys: number[]): Promise<boolean> {
     transposing.value = true;
     transposeError.value = null;
     try {
-      await transpositionApi.transposeSong(songId, { targetKeys });
-      await Promise.all([loadJobs(songId), loadKeyAssets(songId)]);
-      startPolling(songId);
+      await transpositionApi.transposeSong(organizationId, songId, { targetKeys });
+      await Promise.all([loadJobs(organizationId, songId), loadKeyAssets(organizationId, songId)]);
+      startPolling(organizationId, songId);
       return true;
     } catch (err) {
       transposeError.value = getErrorMessage(err);
@@ -178,15 +186,16 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
     }
   }
 
-  function startPolling(songId: number): void {
-    if (pollingSongId.value === songId && pollTimer !== null) {
+  function startPolling(organizationId: number, songId: number): void {
+    if (pollingOrganizationId.value === organizationId && pollingSongId.value === songId && pollTimer !== null) {
       return;
     }
 
     stopPolling();
     pollingSongId.value = songId;
+    pollingOrganizationId.value = organizationId;
     pollTimer = window.setInterval(() => {
-      void refreshDuringPolling(songId);
+      void refreshDuringPolling(organizationId, songId);
     }, POLL_INTERVAL_MS);
   }
 
@@ -196,19 +205,20 @@ export const useAdminStemsStore = defineStore("adminStems", () => {
       pollTimer = null;
     }
     pollingSongId.value = null;
+    pollingOrganizationId.value = null;
   }
 
-  async function refreshDuringPolling(songId: number): Promise<void> {
+  async function refreshDuringPolling(organizationId: number, songId: number): Promise<void> {
     try {
       const hadActiveJobs = hasActiveJobs.value;
       const [nextStems, nextJobs] = await Promise.all([
-        stemsApi.listStems(songId),
-        conversionApi.listConversionJobs(songId),
+        stemsApi.listStems(organizationId, songId),
+        conversionApi.listConversionJobs(organizationId, songId),
       ]);
       stems.value = nextStems;
       jobs.value = nextJobs;
       if (hadActiveJobs || nextJobs.some((job) => ACTIVE_JOB_STATUSES.has(job.status))) {
-        keyAssets.value = await transpositionApi.listKeyAssets(songId);
+        keyAssets.value = await transpositionApi.listKeyAssets(organizationId, songId);
       }
       jobError.value = null;
       if (!hasActiveJobs.value) {
